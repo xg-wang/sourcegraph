@@ -1,8 +1,10 @@
 package backend
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -27,7 +29,7 @@ type HorizontalSearcher struct {
 	clients map[string]zoekt.Streamer // addr -> client
 }
 
-// StreamSearch does a search which merges the stream from every endpoint in Map.
+// StreamSearch does a search which merges the stream from every endpoint in Map, reordering results to produce a sorted stream.
 func (s *HorizontalSearcher) StreamSearch(ctx context.Context, q query.Q, opts *zoekt.SearchOptions, streamer zoekt.Sender) error {
 	clients, err := s.searchers()
 	if err != nil {
@@ -37,6 +39,21 @@ func (s *HorizontalSearcher) StreamSearch(ctx context.Context, q query.Q, opts *
 	// During rebalancing a repository can appear on more than one replica.
 	var mu sync.Mutex
 	dedupper := dedupper{}
+
+	// The results from each endpoint are mostly sorted by priority, with bounded errors described
+	// by SearchResult.Stats.MaxPendingPriority. Each backend will dispatch searches in parallel against
+	// its shards in priority order, but the actual return order of those searches is not constrained.
+	//
+	// Instead, the backend will report the maximum priority shard that it still has pending along with
+	// the results that it returns, so we accumulate results in a heap and only pop when the top item
+	// has a priority greater than the maximum of all endpoints' pending results.
+	endpointMaxPendingPriority := map[string]float64{}
+	resultQueue := PriorityQueue{}
+
+	// To start, initialize every endpoint's maxPending to +inf since we don't yet know the bounds.
+	for endpoint := range clients {
+		endpointMaxPendingPriority[endpoint] = math.Inf(1)
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 	for endpoint, c := range clients {
@@ -51,13 +68,57 @@ func (s *HorizontalSearcher) StreamSearch(ctx context.Context, q query.Q, opts *
 
 				mu.Lock()
 				sr.Files = dedupper.Dedup(endpoint, sr.Files)
-				mu.Unlock()
 
-				streamer.Send(sr)
+				// Note the endpoint's updated MaxPendingShardPriority, and recompute
+				// it across all endpoints to determine what search results are stable.
+				endpointMaxPendingPriority[endpoint] = sr.Stats.MaxPendingShardPriority
+				maxPending := math.Inf(-1)
+				for _, pri := range endpointMaxPendingPriority {
+					if pri > maxPending {
+						maxPending = pri
+					}
+				}
+
+				// Pop and send search results where it is guaranteed that no higher-priority result
+				// is possible, because there are no pending shards with a greater priority.
+				heap.Push(&resultQueue, sr)
+				for len(resultQueue) > 0 && resultQueue[0].Stats.ShardPriority >= maxPending {
+					streamer.Send(heap.Pop(&resultQueue).(*zoekt.SearchResult))
+				}
+
+				mu.Unlock()
 			}))
 		})
 	}
 	return g.Wait()
+}
+
+// PriorityQueue modified from https://golang.org/pkg/container/heap/
+// A PriorityQueue implements heap.Interface and holds Items.
+type PriorityQueue []*zoekt.SearchResult
+
+func (pq PriorityQueue) Len() int { return len(pq) }
+
+func (pq PriorityQueue) Less(i, j int) bool {
+	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
+	return pq[i].Stats.ShardPriority > pq[j].Stats.ShardPriority
+}
+
+func (pq PriorityQueue) Swap(i, j int) {
+	pq[i], pq[j] = pq[j], pq[i]
+}
+
+func (pq *PriorityQueue) Push(x interface{}) {
+	*pq = append(*pq, x.(*zoekt.SearchResult))
+}
+
+func (pq *PriorityQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil // avoid memory leak
+	*pq = old[0 : n-1]
+	return item
 }
 
 // Search aggregates search over every endpoint in Map.
