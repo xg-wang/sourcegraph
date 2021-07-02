@@ -21,8 +21,7 @@ import { Omit } from 'utility-types'
 import { checkOk } from '../backend/fetch'
 import { createAggregateError } from '../util/errors'
 
-import * as GQL from './schema'
-import { fixObservable, getDocumentNode, getOperationType, apolloToGraphQLResult } from './utils'
+import { fixApolloObservable, getDocumentNode } from './utils'
 
 /**
  * Use this template string tag for all GraphQL queries.
@@ -117,8 +116,13 @@ export function watchQueryCommon<T, V = object>({
 }): Observable<GraphQLResult<T>> {
     const document = getDocumentNode(request)
     return from(
+<<<<<<< HEAD
         fixObservable(client.watchQuery({ query: document, variables, fetchPolicy: 'cache-and-network' }))
     ).pipe(map(apolloToGraphQLResult))
+=======
+        fixApolloObservable(client.watchQuery({ query: document, variables, fetchPolicy: 'cache-and-network' }))
+    )
+>>>>>>> 1df4f0721f (fixup! Clean up)
 }
 
 export const graphQLClient = ({ headers }: { headers: RequestInit['headers'] }): ApolloClient<NormalizedCacheObject> =>

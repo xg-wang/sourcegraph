@@ -34,6 +34,17 @@ export const requestGraphQL = <TResult, TVariables = object>(
         headers: getHeaders(),
     })
 
+/**
+ * Similar to `requestGraphQL`, this function will make a GraphQL request to `/.api/graphql` and route through the Apollo cache.
+ * Ideally we should just Apollo `useQuery` or `useMutation` methods, but this function acts as a bridge between RxJS observables and Apollo.
+ * It means we can realise the benefits of the Apollo cache without having a dependency on refactoring problematic components such as `FilteredConnection`.
+ *
+ * @param request The GraphQL query
+ * @param variables A key/value object with variable values
+ * @returns Observable That emits the result or errors if the HTTP request failed
+ * @template TResult The type of the query result (import from our auto-generated types).
+ * @template TVariables The type of the query input variables (import from our auto-generated types).
+ */
 export const watchQuery = <TResult, TVariables = object>(
     request: string,
     variables?: TVariables
