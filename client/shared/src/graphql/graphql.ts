@@ -106,6 +106,7 @@ export function watchQueryCommon<T, V = object>({
     return from(
         fixApolloObservable(client.watchQuery({ query: document, variables, fetchPolicy: 'cache-and-network' }))
     )
+}
 
 export const graphQLClient = ({ headers }: { headers: RequestInit['headers'] }): ApolloClient<NormalizedCacheObject> =>
     new ApolloClient({
