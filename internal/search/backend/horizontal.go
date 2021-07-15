@@ -12,8 +12,16 @@ import (
 	"github.com/google/zoekt"
 	"github.com/google/zoekt/query"
 	"github.com/google/zoekt/stream"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/sync/errgroup"
 )
+
+var reorderQueueSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	Name:    "src_zoekt_reorder_queue_size",
+	Help:    "Maximum size of result reordering buffer for a request.",
+	Buckets: prometheus.ExponentialBuckets(4, 2, 10),
+}, nil)
 
 // HorizontalSearcher is a Streamer which aggregates searches over
 // Map. It manages the connections to Map as the endpoints come and go.
@@ -48,7 +56,8 @@ func (s *HorizontalSearcher) StreamSearch(ctx context.Context, q query.Q, opts *
 	// the results that it returns, so we accumulate results in a heap and only pop when the top item
 	// has a priority greater than the maximum of all endpoints' pending results.
 	endpointMaxPendingPriority := map[string]float64{}
-	resultQueue := PriorityQueue{}
+	resultQueue := priorityQueue{}
+	resultQueueMaxLength := 0 // for a prometheus metric
 
 	// To start, initialize every endpoint's maxPending to +inf since we don't yet know the bounds.
 	for endpoint := range clients {
@@ -69,9 +78,9 @@ func (s *HorizontalSearcher) StreamSearch(ctx context.Context, q query.Q, opts *
 				mu.Lock()
 				sr.Files = dedupper.Dedup(endpoint, sr.Files)
 
-				// Note the endpoint's updated MaxPendingShardPriority, and recompute
+				// Note the endpoint's updated MaxPendingPriority, and recompute
 				// it across all endpoints to determine what search results are stable.
-				endpointMaxPendingPriority[endpoint] = sr.Stats.MaxPendingShardPriority
+				endpointMaxPendingPriority[endpoint] = sr.Progress.MaxPendingPriority
 				maxPending := math.Inf(-1)
 				for _, pri := range endpointMaxPendingPriority {
 					if pri > maxPending {
@@ -81,8 +90,11 @@ func (s *HorizontalSearcher) StreamSearch(ctx context.Context, q query.Q, opts *
 
 				// Pop and send search results where it is guaranteed that no higher-priority result
 				// is possible, because there are no pending shards with a greater priority.
-				heap.Push(&resultQueue, sr)
-				for len(resultQueue) > 0 && resultQueue[0].Stats.ShardPriority >= maxPending {
+				resultQueue.add(sr)
+				if resultQueue.Len() > resultQueueMaxLength {
+					resultQueueMaxLength = resultQueue.Len()
+				}
+				for resultQueue.isTopAbove(maxPending) {
 					streamer.Send(heap.Pop(&resultQueue).(*zoekt.SearchResult))
 				}
 
@@ -90,29 +102,40 @@ func (s *HorizontalSearcher) StreamSearch(ctx context.Context, q query.Q, opts *
 			}))
 		})
 	}
+	reorderQueueSize.WithLabelValues().Observe(float64(resultQueueMaxLength))
 	return g.Wait()
 }
 
-// PriorityQueue modified from https://golang.org/pkg/container/heap/
-// A PriorityQueue implements heap.Interface and holds Items.
-type PriorityQueue []*zoekt.SearchResult
+// priorityQueue modified from https://golang.org/pkg/container/heap/
+// A priorityQueue implements heap.Interface and holds Items.
+// All Exported methods are part of the container.heap interface, and
+// unexported methods are local helpers.
+type priorityQueue []*zoekt.SearchResult
 
-func (pq PriorityQueue) Len() int { return len(pq) }
-
-func (pq PriorityQueue) Less(i, j int) bool {
-	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq[i].Stats.ShardPriority > pq[j].Stats.ShardPriority
+func (pq *priorityQueue) add(sr *zoekt.SearchResult) {
+	heap.Push(pq, sr)
 }
 
-func (pq PriorityQueue) Swap(i, j int) {
+func (pq *priorityQueue) isTopAbove(limit float64) bool {
+	return len(*pq) > 0 && (*pq)[0].Progress.Priority >= limit
+}
+
+func (pq priorityQueue) Len() int { return len(pq) }
+
+func (pq priorityQueue) Less(i, j int) bool {
+	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
+	return pq[i].Progress.Priority > pq[j].Progress.Priority
+}
+
+func (pq priorityQueue) Swap(i, j int) {
 	pq[i], pq[j] = pq[j], pq[i]
 }
 
-func (pq *PriorityQueue) Push(x interface{}) {
+func (pq *priorityQueue) Push(x interface{}) {
 	*pq = append(*pq, x.(*zoekt.SearchResult))
 }
 
-func (pq *PriorityQueue) Pop() interface{} {
+func (pq *priorityQueue) Pop() interface{} {
 	old := *pq
 	n := len(old)
 	item := old[n-1]
