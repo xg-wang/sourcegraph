@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	zoektquery "github.com/google/zoekt/query"
 	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/endpoint"
 	searchbackend "github.com/sourcegraph/sourcegraph/internal/search/backend"
@@ -14,14 +15,30 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/vcs/git"
 )
 
-type TypeParameters interface {
-	typeParametersValue()
+type InternalQuery interface {
+	internalQuery()
+	GetSelect() filter.SelectPath // kill me
 }
 
-func (CommitParameters) typeParametersValue()  {}
-func (DiffParameters) typeParametersValue()    {}
-func (SymbolsParameters) typeParametersValue() {}
-func (TextParameters) typeParametersValue()    {}
+func (Generic) internalQuery() {}
+func (Zoekt) internalQuery()   {}
+
+type Generic struct {
+	TextPatternInfo
+}
+
+func (g Generic) GetSelect() filter.SelectPath {
+	return g.Select
+}
+
+type Zoekt struct {
+	TextPatternInfo // include for all the file garbage
+	zoektquery.Q
+}
+
+func (z Zoekt) GetSelect() filter.SelectPath {
+	return z.Select
+}
 
 type CommitParameters struct {
 	RepoRevs           *RepositoryRevisions
@@ -128,9 +145,9 @@ func (m GlobalSearchMode) String() string {
 // to search for, as well as the hydrated list of repository revisions to
 // search. It defines behavior for text search on repository names, file names, and file content.
 type TextParameters struct {
-	PatternInfo *TextPatternInfo
-	ResultTypes result.Types
-	Timeout     time.Duration
+	InternalQuery InternalQuery
+	ResultTypes   result.Types
+	Timeout       time.Duration
 
 	// Performance optimization: For global queries, resolving repositories and
 	// querying zoekt happens concurrently.
