@@ -100,7 +100,7 @@ func (a *Aggregator) DoFilePathSearch(ctx context.Context, args *search.TextPara
 		tr.Finish()
 	}()
 
-	isDefaultStructuralSearch := args.PatternInfo.IsStructuralPat && args.PatternInfo.FileMatchLimit == search.DefaultMaxSearchResults
+	isDefaultStructuralSearch := args.InternalQuery.(search.Generic).IsStructuralPat && args.InternalQuery.(search.Generic).FileMatchLimit == search.DefaultMaxSearchResults
 
 	if !isDefaultStructuralSearch {
 		return unindexed.SearchFilesInRepos(ctx, args, a)
@@ -113,10 +113,10 @@ func (a *Aggregator) DoFilePathSearch(ctx context.Context, args *search.TextPara
 	if len(fileMatches) == 0 && err == nil {
 		// No results for structural search? Automatically search again and force Zoekt
 		// to resolve more potential file matches by setting a higher FileMatchLimit.
-		patternCopy := *(args.PatternInfo)
+		patternCopy := (args.InternalQuery.(search.Generic))
 		patternCopy.FileMatchLimit = 1000
 		argsCopy := *args
-		argsCopy.PatternInfo = &patternCopy
+		argsCopy.InternalQuery = &patternCopy
 		args = &argsCopy
 
 		fileMatches, stats, err = unindexed.SearchFilesInReposBatch(ctx, args)

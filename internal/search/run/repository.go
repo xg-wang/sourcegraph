@@ -2,7 +2,6 @@ package run
 
 import (
 	"context"
-	"math"
 	"regexp"
 	"runtime"
 
@@ -69,7 +68,7 @@ func SearchRepositories(ctx context.Context, args *search.TextParameters, limit 
 		}
 	}
 
-	patternRe := args.PatternInfo.Pattern
+	patternRe := args.InternalQuery.(search.Generic).Pattern
 	if !args.Query.IsCaseSensitive() {
 		patternRe = "(?i)" + patternRe
 	}
@@ -98,7 +97,7 @@ func SearchRepositories(ctx context.Context, args *search.TextParameters, limit 
 	}()
 
 	// Filter the repos if there is a repohasfile: or -repohasfile field.
-	if len(args.PatternInfo.FilePatternsReposMustExclude) > 0 || len(args.PatternInfo.FilePatternsReposMustInclude) > 0 {
+	if len(args.InternalQuery.(search.Generic).FilePatternsReposMustExclude) > 0 || len(args.InternalQuery.(search.Generic).FilePatternsReposMustInclude) > 0 {
 		// Fallback to batch for reposToAdd
 		var repos []*search.RepositoryRevisions
 		for matched := range results {
@@ -205,18 +204,19 @@ func reposToAdd(ctx context.Context, args *search.TextParameters, repos []*searc
 	// matchCounts will contain the count of repohasfile patterns that matched.
 	// For negations, we will explicitly set this to -1 if it matches.
 	matchCounts := make(map[api.RepoID]int)
-	if len(args.PatternInfo.FilePatternsReposMustInclude) > 0 {
-		for _, pattern := range args.PatternInfo.FilePatternsReposMustInclude {
+	if len(args.InternalQuery.(search.Generic).FilePatternsReposMustInclude) > 0 {
+		for _, pattern := range args.InternalQuery.(search.Generic).FilePatternsReposMustInclude {
 			// The high FileMatchLimit here is to make sure we get all the repo matches we can. Setting it to
 			// len(repos) could mean we miss some repos since there could be for example len(repos) file matches in
 			// the first repo and some more in other repos.
-			p := search.TextPatternInfo{IsRegExp: true, FileMatchLimit: math.MaxInt32, IncludePatterns: []string{pattern}, PathPatternsAreCaseSensitive: false, PatternMatchesContent: true, PatternMatchesPath: true}
+			// p := search.TextPatternInfo{IsRegExp: true, FileMatchLimit: math.MaxInt32, IncludePatterns: []string{pattern}, PathPatternsAreCaseSensitive: false, PatternMatchesContent: true, PatternMatchesPath: true}
 			q, err := query.ParseLiteral("file:" + pattern)
 			if err != nil {
 				return nil, err
 			}
+
 			newArgs := *args
-			newArgs.PatternInfo = &p
+			//			newArgs.PatternInfo = &p
 			newArgs.RepoPromise = (&search.RepoPromise{}).Resolve(repos)
 			newArgs.Query = q
 			newArgs.UseFullDeadline = true
@@ -243,15 +243,15 @@ func reposToAdd(ctx context.Context, args *search.TextParameters, repos []*searc
 		}
 	}
 
-	if len(args.PatternInfo.FilePatternsReposMustExclude) > 0 {
-		for _, pattern := range args.PatternInfo.FilePatternsReposMustExclude {
-			p := search.TextPatternInfo{IsRegExp: true, FileMatchLimit: math.MaxInt32, IncludePatterns: []string{pattern}, PathPatternsAreCaseSensitive: false, PatternMatchesContent: true, PatternMatchesPath: true}
+	if len(args.InternalQuery.(search.Generic).FilePatternsReposMustExclude) > 0 {
+		for _, pattern := range args.InternalQuery.(search.Generic).FilePatternsReposMustExclude {
+			// p := search.TextPatternInfo{IsRegExp: true, FileMatchLimit: math.MaxInt32, IncludePatterns: []string{pattern}, PathPatternsAreCaseSensitive: false, PatternMatchesContent: true, PatternMatchesPath: true}
 			q, err := query.ParseLiteral("file:" + pattern)
 			if err != nil {
 				return nil, err
 			}
 			newArgs := *args
-			newArgs.PatternInfo = &p
+			//			newArgs.PatternInfo = &p
 			rp := (&search.RepoPromise{}).Resolve(repos)
 			newArgs.RepoPromise = rp
 			newArgs.Query = q
@@ -268,7 +268,8 @@ func reposToAdd(ctx context.Context, args *search.TextParameters, repos []*searc
 
 	var rsta []*search.RepositoryRevisions
 	for _, r := range repos {
-		if count, ok := matchCounts[r.Repo.ID]; ok && count == len(args.PatternInfo.FilePatternsReposMustInclude) {
+		if count, ok := matchCounts[r.Repo.ID]; ok && count == len(
+			args.InternalQuery.(search.Generic).FilePatternsReposMustInclude) {
 			rsta = append(rsta, r)
 		}
 	}
