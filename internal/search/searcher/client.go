@@ -41,10 +41,10 @@ var (
 	}
 )
 
-var MockSearch func(ctx context.Context, repo api.RepoName, commit api.CommitID, p *search.TextPatternInfo, fetchTimeout time.Duration) (matches []*protocol.FileMatch, limitHit bool, err error)
+var MockSearch func(ctx context.Context, repo api.RepoName, commit api.CommitID, p search.Generic, fetchTimeout time.Duration) (matches []*protocol.FileMatch, limitHit bool, err error)
 
 // Search searches repo@commit with p.
-func Search(ctx context.Context, searcherURLs *endpoint.Map, repo api.RepoName, branch string, commit api.CommitID, indexed bool, p *search.TextPatternInfo, fetchTimeout time.Duration, indexerEndpoints []string) (matches []*protocol.FileMatch, limitHit bool, err error) {
+func Search(ctx context.Context, searcherURLs *endpoint.Map, repo api.RepoName, branch string, commit api.CommitID, indexed bool, p search.Generic, fetchTimeout time.Duration, indexerEndpoints []string) (matches []*protocol.FileMatch, limitHit bool, err error) {
 	if MockSearch != nil {
 		return MockSearch(ctx, repo, commit, p, fetchTimeout)
 	}

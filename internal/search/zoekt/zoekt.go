@@ -68,7 +68,7 @@ func getSpanContext(ctx context.Context) (shouldTrace bool, spanContext map[stri
 	return true, spanContext
 }
 
-func SearchOpts(ctx context.Context, k int, query *search.TextPatternInfo) zoekt.SearchOptions {
+func SearchOpts(ctx context.Context, k int, query search.Generic) zoekt.SearchOptions {
 	shouldTrace, spanContext := getSpanContext(ctx)
 	searchOpts := zoekt.SearchOptions{
 		Trace:                  shouldTrace,

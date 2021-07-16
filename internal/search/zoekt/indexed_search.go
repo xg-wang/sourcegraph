@@ -221,8 +221,10 @@ func NewIndexedSearchRequest(ctx context.Context, args *search.TextParameters, t
 
 	// If Zoekt is disabled just fallback to Unindexed.
 	if !args.Zoekt.Enabled() {
-		if args.PatternInfo.Index == query.Only {
-			return nil, errors.Errorf("invalid index:%q (indexed search is not enabled)", args.PatternInfo.Index)
+		// TODO(rvantonder): must represent Zoekt and Generic as Any(...), or tree. When there is only a Zoekt query, it implies `index:only` search. Use this here.
+		// when we create the internal representation.
+		if _, ok := args.InternalQuery.(search.Zoekt); ok {
+			return nil, errors.Errorf("can't do index:only with zoekt disabled")
 		}
 
 		return &IndexedSearchRequest{
@@ -233,17 +235,21 @@ func NewIndexedSearchRequest(ctx context.Context, args *search.TextParameters, t
 
 	// Fallback to Unindexed if the query contains ref-globs
 	if query.ContainsRefGlobs(args.Query) {
-		if args.PatternInfo.Index == query.Only {
-			return nil, errors.Errorf("invalid index:%q (revsions with glob pattern cannot be resolved for indexed searches)", args.PatternInfo.Index)
+		if _, ok := args.InternalQuery.(search.Zoekt); ok {
+			// TODO(rvantonder): must represent ref-globs in Zoekt and Generic as Any(...).
+			return nil, errors.Errorf("can't do ref-globs for index:only")
 		}
+
 		return &IndexedSearchRequest{
+			// TODO(rvantonder): represent this in the Zoekt query as a dynamic fn
 			Unindexed: limitUnindexedRepos(repos, maxUnindexedRepoRevSearchesPerQuery, stream),
 		}, nil
 	}
 
 	// Fallback to Unindexed if index:no
-	if args.PatternInfo.Index == query.No {
+	if args.InternalQuery.(search.Generic).Index == query.No { // TODO(rvantonder): Implied? InternalQuery can never be type search.Zoekt if index:no.
 		return &IndexedSearchRequest{
+			// TODO(rvantonder): represent this in the Unindexed query
 			Unindexed: limitUnindexedRepos(repos, maxUnindexedRepoRevSearchesPerQuery, stream),
 		}, nil
 	}
@@ -263,7 +269,8 @@ func NewIndexedSearchRequest(ctx context.Context, args *search.TextParameters, t
 	if err != nil {
 		if ctx.Err() == nil {
 			// Only hard fail if the user specified index:only
-			if args.PatternInfo.Index == query.Only {
+			if _, ok := args.InternalQuery.(search.Zoekt); ok {
+				// TODO(rvantonder) When there is only a Zoekt query, it implies `index:only` search. Use this here.
 				return nil, errors.New("index:only failed since indexed search is not available yet")
 			}
 
@@ -286,19 +293,21 @@ func NewIndexedSearchRequest(ctx context.Context, args *search.TextParameters, t
 		log.Int("searcher_repos.size", len(searcherRepos)),
 	)
 
-	// Disable unindexed search
-	if args.PatternInfo.Index == query.Only {
+	if _, ok := args.InternalQuery.(search.Zoekt); ok {
+		// TODO(rvantonder) When there is only a Zoekt query, it implies `index:only` search. Use this here.
 		searcherRepos = limitUnindexedRepos(searcherRepos, 0, stream)
 	}
 
+	_, exclusiveIndex := args.InternalQuery.(search.Zoekt)
+
 	return &IndexedSearchRequest{
 		Args: args,
-		Typ:  typ,
+		Typ:  typ, // either text or symbol
 
-		Unindexed: limitUnindexedRepos(searcherRepos, maxUnindexedRepoRevSearchesPerQuery, stream),
-		RepoRevs:  indexed,
+		Unindexed: limitUnindexedRepos(searcherRepos, maxUnindexedRepoRevSearchesPerQuery, stream), // TODO(rvantonder): do not represent this state for data structure in indexed search.
+		RepoRevs:  indexed,                                                                         // TODO(rvantonder): do not represent this state for data structure in unindexed search.
 
-		DisableUnindexedSearch: args.PatternInfo.Index == query.Only,
+		DisableUnindexedSearch: exclusiveIndex, // TODO(rvantonder) When there is only a Zoekt query, it implies `index:only` search. Use this here. It must be computed beforehand.
 	}, nil
 }
 
@@ -314,14 +323,18 @@ func zoektSearchGlobal(ctx context.Context, args *search.TextParameters, typ Ind
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	queryExceptRepos, err := queryToZoektQuery(args.PatternInfo, typ)
+	// TODO(rvantonder): where was typ computed?
+	// TODO(rvantonder) This needs to be pulled up and out and processed.
+	queryExceptRepos, err := queryToZoektQuery(args.InternalQuery.(search.Generic), typ)
 	if err != nil {
 		return err
 	}
 
 	finalQuery := zoektquery.NewAnd(&zoektquery.Branch{Pattern: "HEAD", Exact: true}, queryExceptRepos)
-	k := ResultCountFactor(0, args.PatternInfo.FileMatchLimit, true)
-	searchOpts := SearchOpts(ctx, k, args.PatternInfo)
+	// TODO(rvantonder) This needs to be pulled up and out and processed
+	k := ResultCountFactor(0, args.InternalQuery.(search.Generic).FileMatchLimit, true)
+	// TODO(rvantonder) This needs to be pulled up and out and processed
+	searchOpts := SearchOpts(ctx, k, args.InternalQuery.(search.Generic))
 
 	// Start event stream.
 	t0 := time.Now()
@@ -374,7 +387,7 @@ func zoektSearchGlobal(ctx context.Context, args *search.TextParameters, typ Ind
 
 		// PERF: if we are going to be selecting to repo results only anyways, we can just ask
 		// zoekt for only results of type repo.
-		if args.PatternInfo.Select.Root() == filter.Repository {
+		if zoektQ, ok := args.InternalQuery.(search.Zoekt); ok && zoektQ.Select.Root() == filter.Repository { // TODO(rvantonder): select for zoekt query implied by type
 			return zoektSearchReposOnly(ctx, args.Zoekt.Client, finalQuery, c, func() map[api.RepoID]*search.RepositoryRevisions {
 				<-reposResolved
 				// getRepoInputRev is nil only if we encountered an error during repo resolution.
@@ -448,15 +461,17 @@ func zoektSearch(ctx context.Context, args *search.TextParameters, repos *Indexe
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	queryExceptRepos, err := queryToZoektQuery(args.PatternInfo, typ)
+	queryExceptRepos, err := queryToZoektQuery(args.InternalQuery.(search.Generic), typ)
 	if err != nil {
 		return err
 	}
 
 	finalQuery := zoektquery.NewAnd(&zoektquery.RepoBranches{Set: repos.repoBranches}, queryExceptRepos)
 
-	k := ResultCountFactor(len(repos.repoBranches), args.PatternInfo.FileMatchLimit, false)
-	searchOpts := SearchOpts(ctx, k, args.PatternInfo)
+	// TODO(rvantonder) This needs to be pulled up and out and processed
+	k := ResultCountFactor(len(repos.repoBranches), args.InternalQuery.(search.Generic).FileMatchLimit, false)
+	// TODO(rvantonder) This needs to be pulled up and out and processed
+	searchOpts := SearchOpts(ctx, k, args.InternalQuery.(search.Generic))
 
 	// Start event stream.
 	t0 := time.Now()
@@ -480,7 +495,7 @@ func zoektSearch(ctx context.Context, args *search.TextParameters, repos *Indexe
 
 	// PERF: if we are going to be selecting to repo results only anyways, we can just ask
 	// zoekt for only results of type repo.
-	if args.PatternInfo.Select.Root() == filter.Repository {
+	if zoektQ, ok := args.InternalQuery.(search.Zoekt); ok && zoektQ.Select.Root() == filter.Repository { // TODO(rvantonder): select for zoekt query implied by type
 		return zoektSearchReposOnly(ctx, args.Zoekt.Client, finalQuery, c, func() map[api.RepoID]*search.RepositoryRevisions {
 			repoRevMap := make(map[api.RepoID]*search.RepositoryRevisions, len(repos.repoRevs))
 			for _, r := range repos.repoRevs {
@@ -750,7 +765,8 @@ func contextWithoutDeadline(cOld context.Context) (context.Context, context.Canc
 	return cNew, cancel
 }
 
-func queryToZoektQuery(query *search.TextPatternInfo, typ IndexedRequestType) (zoektquery.Q, error) {
+// TODO(rvantonder): This needs to be pulled up and out. It needs to not depend on Generic, but Zoekt
+func queryToZoektQuery(query search.Generic, typ IndexedRequestType) (zoektquery.Q, error) {
 	var and []zoektquery.Q
 
 	var q zoektquery.Q

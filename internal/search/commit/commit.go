@@ -63,16 +63,16 @@ func SearchCommitLogInRepos(ctx context.Context, db dbutil.DB, args *search.Text
 // ResolveCommitParameters creates parameters for commit search from tp. It
 // will wait for the list of repos to be resolved.
 func ResolveCommitParameters(ctx context.Context, tp *search.TextParameters) (*search.TextParametersForCommitParameters, error) {
-	old := tp.PatternInfo
+	old := tp.InternalQuery
 	patternInfo := &search.CommitPatternInfo{
-		Pattern:                      old.Pattern,
-		IsRegExp:                     old.IsRegExp,
-		IsCaseSensitive:              old.IsCaseSensitive,
-		FileMatchLimit:               old.FileMatchLimit,
-		IncludePatterns:              old.IncludePatterns,
-		ExcludePattern:               old.ExcludePattern,
+		Pattern:                      old.(search.Generic).Pattern,
+		IsRegExp:                     old.(search.Generic).IsRegExp,
+		IsCaseSensitive:              old.(search.Generic).IsCaseSensitive,
+		FileMatchLimit:               old.(search.Generic).FileMatchLimit,
+		IncludePatterns:              old.(search.Generic).IncludePatterns,
+		ExcludePattern:               old.(search.Generic).ExcludePattern,
 		PathPatternsAreRegExps:       true,
-		PathPatternsAreCaseSensitive: old.PathPatternsAreCaseSensitive,
+		PathPatternsAreCaseSensitive: old.(search.Generic).PathPatternsAreCaseSensitive,
 	}
 	repos, err := tp.RepoPromise.Get(ctx)
 	if err != nil {

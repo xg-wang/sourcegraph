@@ -17,27 +17,23 @@ import (
 
 type InternalQuery interface {
 	internalQuery()
-	GetSelect() filter.SelectPath // kill me
 }
 
 func (Generic) internalQuery() {}
 func (Zoekt) internalQuery()   {}
 
+type Shared struct {
+	// PatternInfo.FileMatchLimit
+}
+
 type Generic struct {
 	TextPatternInfo
 }
 
-func (g Generic) GetSelect() filter.SelectPath {
-	return g.Select
-}
-
 type Zoekt struct {
+	// typ (?) symbol v txt. what if it's unindexed? -> Generic
 	TextPatternInfo // include for all the file garbage
 	zoektquery.Q
-}
-
-func (z Zoekt) GetSelect() filter.SelectPath {
-	return z.Select
 }
 
 type CommitParameters struct {

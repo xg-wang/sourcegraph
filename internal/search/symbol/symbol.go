@@ -2,7 +2,6 @@ package symbol
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"regexp/syntax"
 	"sort"
@@ -48,18 +47,14 @@ func Search(ctx context.Context, args *search.TextParameters, limit int, stream 
 		return err
 	}
 
-	repos, err := args.RepoPromise.Get(ctx)
-	if err != nil {
-		return err
-	}
-
-	tr, ctx := trace.New(ctx, "Search symbols", fmt.Sprintf("query: %+v, numRepoRevs: %d", args.PatternInfo, len(repos)))
+	tr, ctx := trace.New(ctx, "Search symbols", "blah blah")
 	defer func() {
 		tr.SetError(err)
 		tr.Finish()
 	}()
 
-	if args.PatternInfo.Pattern == "" {
+	// why :'(
+	if args.InternalQuery.(search.Generic).Pattern == "" {
 		return nil
 	}
 
@@ -100,7 +95,7 @@ func Search(ctx context.Context, args *search.TextParameters, limit int, stream 
 		goroutine.Go(func() {
 			defer run.Release()
 
-			matches, err := searchInRepo(ctx, repoRevs, args.PatternInfo, limit)
+			matches, err := searchInRepo(ctx, repoRevs, args.InternalQuery.(search.Generic), limit)
 			stats, err := searchrepos.HandleRepoSearchResult(repoRevs, len(matches) > limit, false, err)
 			stream.Send(streaming.SearchEvent{
 				Results: matches,
@@ -120,7 +115,7 @@ func Search(ctx context.Context, args *search.TextParameters, limit int, stream 
 	return run.Wait()
 }
 
-func searchInRepo(ctx context.Context, repoRevs *search.RepositoryRevisions, patternInfo *search.TextPatternInfo, limit int) (res []result.Match, err error) {
+func searchInRepo(ctx context.Context, repoRevs *search.RepositoryRevisions, patternInfo search.Generic, limit int) (res []result.Match, err error) {
 	span, ctx := ot.StartSpanFromContext(ctx, "Search symbols in repo")
 	defer func() {
 		if err != nil {
