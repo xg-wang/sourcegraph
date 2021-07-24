@@ -1311,6 +1311,15 @@ type Query {
         patternType: SearchPatternType = literal
     ): JSONValue
     """
+    Compute a result with the Compute language.
+    """
+    compute(
+        """
+        The compute query.
+        """
+        query: String = ""
+    ): ComputeResult!
+    """
     The current site.
     """
     site: Site!
@@ -1626,6 +1635,15 @@ type Search {
     """
     stats: SearchResultsStats!
 }
+
+"""
+Compute results.
+"""
+type ComputeResult {
+    kind: String
+    value: String!
+}
+
 
 """
 Predefined suggestions for search filters when backfill.
