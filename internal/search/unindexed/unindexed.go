@@ -81,29 +81,41 @@ func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	if args.Mode != search.SearcherOnly {
-		// Run searches on indexed repositories.
+	runZoekt := func() {
+		// Run literal and regexp searches.
+		g.Go(func() error {
+			return indexed.Search(ctx, stream)
+		})
 
-		if !args.PatternInfo.IsStructuralPat {
-			// Run literal and regexp searches.
-			g.Go(func() error {
-				return indexed.Search(ctx, stream)
-			})
-		} else {
-			// Run structural search (fulfilled via searcher).
-			g.Go(func() error {
-				repos := make([]*search.RepositoryRevisions, 0, len(indexed.Repos()))
-				for _, repo := range indexed.Repos() {
-					repos = append(repos, repo)
-				}
-				return callSearcherOverRepos(ctx, args, stream, repos, true)
-			})
+	}
+
+	withSearcher := func(repos []*search.RepositoryRevisions, withZoekt bool) (err error) {
+		return callSearcherOverRepos(ctx, args, stream, repos, withZoekt)
+	}
+
+	runStructuralSearchOnIndexedRepos := func() {
+		// Run structural search (fulfilled via searcher).
+		g.Go(func() error {
+			repos := make([]*search.RepositoryRevisions, 0, len(indexed.Repos()))
+			for _, repo := range indexed.Repos() {
+				repos = append(repos, repo)
+			}
+			return withSearcher(repos, true)
+		})
+	}
+
+	runIf := func(c bool, f func()) {
+		if c {
+			f()
 		}
 	}
 
+	runIf(args.Mode != search.SearcherOnly && !args.PatternInfo.IsStructuralPat, runZoekt)
+	runIf(args.Mode != search.SearcherOnly && args.PatternInfo.IsStructuralPat, runStructuralSearchOnIndexedRepos)
+
 	// Concurrently run searcher for all unindexed repos regardless whether text, regexp, or structural search.
 	g.Go(func() error {
-		return callSearcherOverRepos(ctx, args, stream, indexed.Unindexed, false)
+		return withSearcher(indexed.Unindexed, false)
 	})
 
 	return g.Wait()
