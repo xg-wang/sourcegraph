@@ -51,24 +51,27 @@ func IndexedRequest(ctx context.Context, args *search.TextParameters, stream str
 	return zoektutil.NewIndexedSearchRequest(ctx, args, zoektutil.TextRequest, stream)
 }
 
-func StructuralSearchFilesInRepos(ctx context.Context, indexed *zoektutil.IndexedSearchRequest, searcher func([]*search.RepositoryRevisions, bool) error) (err error) {
+func searchers(mode search.GlobalSearchMode, indexed *zoektutil.IndexedSearchRequest, searcher func([]*search.RepositoryRevisions, bool) error) []func() error {
+	fns := []func() error{}
+	if mode != search.SearcherOnly {
+		fns = append(fns,
+			func() error {
+				repos := make([]*search.RepositoryRevisions, 0, len(indexed.Repos()))
+				for _, repo := range indexed.Repos() {
+					repos = append(repos, repo)
+				}
+				return searcher(repos, true)
+			})
+	}
+	fns = append(fns, func() error { return searcher(indexed.Unindexed, false) })
+	return fns
+}
 
+func StructuralSearchFilesInRepos(ctx context.Context, searchers []func() error) (err error) {
 	g, ctx := errgroup.WithContext(ctx)
-
-	// Run structural search (fulfilled via searcher).
-	g.Go(func() error {
-		repos := make([]*search.RepositoryRevisions, 0, len(indexed.Repos()))
-		for _, repo := range indexed.Repos() {
-			repos = append(repos, repo)
-		}
-		return searcher(repos, true)
-	})
-
-	// Concurrently run searcher for all unindexed repos.
-	g.Go(func() error {
-		return searcher(indexed.Unindexed, false)
-	})
-
+	for _, f := range searchers {
+		g.Go(f)
+	}
 	return g.Wait()
 }
 
@@ -123,7 +126,7 @@ func StructuralSearchFilesInReposBatch(ctx context.Context, args *search.TextPar
 		ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(args.PatternInfo.FileMatchLimit))
 		defer cleanup()
 
-		indexed, err := IndexedRequest(ctx, args, stream)
+		request, err := IndexedRequest(ctx, args, stream)
 		if err != nil {
 			return err
 		}
@@ -132,7 +135,7 @@ func StructuralSearchFilesInReposBatch(ctx context.Context, args *search.TextPar
 			return callSearcherOverRepos(ctx, args, stream, repos, indexed)
 		}
 
-		return StructuralSearchFilesInRepos(ctx, indexed, searcher)
+		return StructuralSearchFilesInRepos(ctx, searchers(args.Mode, request, searcher))
 	})
 
 	fms, fmErr := matchesToFileMatches(matches)
