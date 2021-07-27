@@ -67,10 +67,6 @@ func searchers(mode search.GlobalSearchMode, indexed *zoektutil.IndexedSearchReq
 	return fns
 }
 
-func StructuralSearchFilesInRepos(ctx context.Context, searchers []func() error) (err error) {
-
-}
-
 // SearchFilesInRepos searches a set of repos for a pattern.
 func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream streaming.Sender) (err error) {
 	if MockSearchFilesInRepos != nil {
