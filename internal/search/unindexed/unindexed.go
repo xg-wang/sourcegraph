@@ -33,6 +33,24 @@ var textSearchLimiter = mutablelimiter.New(32)
 
 var MockSearchFilesInRepos func(args *search.TextParameters) ([]result.Match, *streaming.Stats, error)
 
+func IndexedRequest(ctx context.Context, args *search.TextParameters, stream streaming.Sender) (indexed *zoektutil.IndexedSearchRequest, err error) {
+	// performance: for global searches, we avoid calling NewIndexedSearchRequest
+	// because zoekt will anyway have to search all its shards.
+	if args.Mode == search.ZoektGlobalSearch {
+		q, err := search.QueryToZoektQuery(args.PatternInfo, false)
+		if err != nil {
+			return nil, err
+		}
+		return &zoektutil.IndexedSearchRequest{
+			Args:     args,
+			Query:    q,
+			Typ:      zoektutil.TextRequest,
+			RepoRevs: &zoektutil.IndexedRepoRevs{},
+		}, nil
+	}
+	return zoektutil.NewIndexedSearchRequest(ctx, args, zoektutil.TextRequest, stream)
+}
+
 // SearchFilesInRepos searches a set of repos for a pattern.
 func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream streaming.Sender) (err error) {
 	if MockSearchFilesInRepos != nil {
@@ -58,25 +76,9 @@ func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 		trace.Stringer("global_search_mode", args.Mode),
 	)
 
-	// performance: for global searches, we avoid calling NewIndexedSearchRequest
-	// because zoekt will anyway have to search all its shards.
-	var indexed *zoektutil.IndexedSearchRequest
-	if args.Mode == search.ZoektGlobalSearch {
-		q, err := search.QueryToZoektQuery(args.PatternInfo, false)
-		if err != nil {
-			return err
-		}
-		indexed = &zoektutil.IndexedSearchRequest{
-			Args:     args,
-			Query:    q,
-			Typ:      zoektutil.TextRequest,
-			RepoRevs: &zoektutil.IndexedRepoRevs{},
-		}
-	} else {
-		indexed, err = zoektutil.NewIndexedSearchRequest(ctx, args, zoektutil.TextRequest, stream)
-		if err != nil {
-			return err
-		}
+	indexed, err := IndexedRequest(ctx, args, stream)
+	if err != nil {
+		return err
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
