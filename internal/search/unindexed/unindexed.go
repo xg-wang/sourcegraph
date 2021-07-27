@@ -68,11 +68,7 @@ func searchers(mode search.GlobalSearchMode, indexed *zoektutil.IndexedSearchReq
 }
 
 func StructuralSearchFilesInRepos(ctx context.Context, searchers []func() error) (err error) {
-	g, ctx := errgroup.WithContext(ctx)
-	for _, f := range searchers {
-		g.Go(f)
-	}
-	return g.Wait()
+
 }
 
 // SearchFilesInRepos searches a set of repos for a pattern.
@@ -135,7 +131,11 @@ func StructuralSearchFilesInReposBatch(ctx context.Context, args *search.TextPar
 			return callSearcherOverRepos(ctx, args, stream, repos, indexed)
 		}
 
-		return StructuralSearchFilesInRepos(ctx, searchers(args.Mode, request, searcher))
+		g, ctx := errgroup.WithContext(ctx)
+		for _, f := range searchers(args.Mode, request, searcher) {
+			g.Go(f)
+		}
+		return g.Wait()
 	})
 
 	fms, fmErr := matchesToFileMatches(matches)
