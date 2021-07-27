@@ -51,14 +51,7 @@ func IndexedRequest(ctx context.Context, args *search.TextParameters, stream str
 	return zoektutil.NewIndexedSearchRequest(ctx, args, zoektutil.TextRequest, stream)
 }
 
-func StructuralSearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream streaming.Sender) (err error) {
-	ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(args.PatternInfo.FileMatchLimit))
-	defer cleanup()
-
-	indexed, err := IndexedRequest(ctx, args, stream)
-	if err != nil {
-		return err
-	}
+func StructuralSearchFilesInRepos(ctx context.Context, indexed *zoektutil.IndexedSearchRequest, searcher func([]*search.RepositoryRevisions, bool) error) (err error) {
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -68,12 +61,12 @@ func StructuralSearchFilesInRepos(ctx context.Context, args *search.TextParamete
 		for _, repo := range indexed.Repos() {
 			repos = append(repos, repo)
 		}
-		return callSearcherOverRepos(ctx, args, stream, repos, true)
+		return searcher(repos, true)
 	})
 
 	// Concurrently run searcher for all unindexed repos.
 	g.Go(func() error {
-		return callSearcherOverRepos(ctx, args, stream, indexed.Unindexed, false)
+		return searcher(indexed.Unindexed, false)
 	})
 
 	return g.Wait()
@@ -125,11 +118,35 @@ func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 	return g.Wait()
 }
 
+func StructuralSearchFilesInReposBatch(ctx context.Context, args *search.TextParameters) ([]*result.FileMatch, streaming.Stats, error) {
+	matches, stats, err := streaming.CollectStream(func(stream streaming.Sender) error {
+		ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(args.PatternInfo.FileMatchLimit))
+		defer cleanup()
+
+		indexed, err := IndexedRequest(ctx, args, stream)
+		if err != nil {
+			return err
+		}
+
+		searcher := func(repos []*search.RepositoryRevisions, indexed bool) error {
+			return callSearcherOverRepos(ctx, args, stream, repos, indexed)
+		}
+
+		return StructuralSearchFilesInRepos(ctx, indexed, searcher)
+	})
+
+	fms, fmErr := matchesToFileMatches(matches)
+	if fmErr != nil && err == nil {
+		err = errors.Wrap(fmErr, "searchFilesInReposBatch failed to convert results")
+	}
+	return fms, stats, err
+}
+
 // SearchFilesInRepoBatch is a convenience function around searchFilesInRepos
 // which collects the results from the stream.
 func SearchFilesInReposBatch(ctx context.Context, args *search.TextParameters) ([]*result.FileMatch, streaming.Stats, error) {
 	matches, stats, err := streaming.CollectStream(func(stream streaming.Sender) error {
-		return StructuralSearchFilesInRepos(ctx, args, stream)
+		return SearchFilesInRepos(ctx, args, stream)
 	})
 
 	fms, fmErr := matchesToFileMatches(matches)
