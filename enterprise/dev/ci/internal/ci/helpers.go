@@ -190,6 +190,11 @@ func (c Config) isSgOnly() bool {
 }
 
 func (c Config) isGoOnly() bool {
+	for _, p := range c.changedFiles {
+		if !strings.HasSuffix(p, ".go") && p != "go.sum" && p != "go.mod" {
+			return false
+		}
+	}
 	return true
 }
 

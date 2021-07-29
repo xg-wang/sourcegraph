@@ -2,10 +2,6 @@
 
 set -e
 
-echo "+++ DATABASE TEST START"
-go test -count=1 -v ./internal/database
-echo "+++ DATABASE TEST DONE"
-
 # For symbol tests
 echo "--- build libsqlite"
 ./dev/libsqlite3-pcre/build.sh
