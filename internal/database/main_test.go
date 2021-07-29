@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -62,10 +63,35 @@ func startEphemeralDB() (dsn string, _ func(), _ error) {
 		}
 	}()
 
-	// HACK: CI doesn't have postgres on the PATH. Hardcode it in until we
-	// update our agents.
-	if os.Getenv("CI") != "" {
+	// allows us to adjust the command before running. Use case is for logging
+	// and to drop privilages on CI.
+	cmdPreRun := func(c *exec.Cmd) {
+		if !testing.Verbose() {
+			return
+		}
+		if c.Stdout == nil {
+			c.Stdout = os.Stdout
+		}
+		if c.Stderr == nil {
+			c.Stderr = os.Stderr
+		}
+	}
+
+	// HACK: CI doesn't have postgres on the PATH and runs as root. Hardcode
+	// it in until we update our agents.
+	if os.Getenv("CI") != "" && syscall.Getuid() == 0 {
 		os.Setenv("PATH", os.Getenv("PATH")+":/usr/lib/postgresql/12/bin")
+
+		sudo, err := exec.LookPath("sudo")
+		if err != nil {
+			return "", nil, err
+		}
+		old := cmdPreRun
+		cmdPreRun = func(c *exec.Cmd) {
+			c.Args = append([]string{"sudo", "-u", "postgres", "-E", c.Path}, c.Args[1:]...)
+			c.Path = sudo
+			old(c)
+		}
 	}
 
 	// This only works if postgres is on PATH.
@@ -97,8 +123,7 @@ func startEphemeralDB() (dsn string, _ func(), _ error) {
 	// Create the database without auth and without fsync.
 	cmd := exec.Command("initdb", pgData, "--nosync", "-E", "UNICODE", "--auth=trust")
 	cmd.Env = env
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
+	cmdPreRun(cmd)
 	if err := cmd.Run(); err != nil {
 		return "", nil, err
 	}
@@ -121,7 +146,6 @@ log_min_duration_statement = 0
 	// message saying it is ready.
 	cmd = exec.Command("postgres", "-D", pgData)
 	cmd.Env = env
-	cmd.Stdout = os.Stdout
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return "", nil, err
@@ -134,6 +158,7 @@ log_min_duration_statement = 0
 		r = io.TeeReader(r, os.Stderr)
 	}
 
+	cmdPreRun(cmd)
 	if err := cmd.Start(); err != nil {
 		return "", nil, err
 	}
