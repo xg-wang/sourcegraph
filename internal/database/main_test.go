@@ -77,21 +77,10 @@ func startEphemeralDB() (dsn string, _ func(), _ error) {
 		}
 	}
 
-	// HACK: CI doesn't have postgres on the PATH and runs as root. Hardcode
+	// HACK: CI doesn't have postgres on the PATH. Hardcode
 	// it in until we update our agents.
-	if os.Getenv("CI") != "" && syscall.Getuid() == 0 {
+	if os.Getenv("CI") != "" {
 		os.Setenv("PATH", os.Getenv("PATH")+":/usr/lib/postgresql/12/bin")
-
-		sudo, err := exec.LookPath("sudo")
-		if err != nil {
-			return "", nil, err
-		}
-		old := cmdPreRun
-		cmdPreRun = func(c *exec.Cmd) {
-			c.Args = append([]string{"sudo", "-u", "postgres", "-E", c.Path}, c.Args[1:]...)
-			c.Path = sudo
-			old(c)
-		}
 	}
 
 	// This only works if postgres is on PATH.
@@ -119,6 +108,28 @@ func startEphemeralDB() (dsn string, _ func(), _ error) {
 		"PGDATA="+pgData,
 		"PGDATABASE=postgres",
 	)
+
+	// CI runs as root but postgres can't :O
+	if os.Getenv("CI") != "" && syscall.Getuid() == 0 {
+		sudo, err := exec.LookPath("sudo")
+		if err != nil {
+			return "", nil, err
+		}
+
+		// need the tmp dir to be owned by postgres user. Easier to use
+		// exec than looking up uid.
+		if err := exec.Command("chown", "postgres", pgHost).Run(); err != nil {
+			return "", nil, err
+		}
+
+		// need to wrap commands so they run as postgres user
+		old := cmdPreRun
+		cmdPreRun = func(c *exec.Cmd) {
+			c.Args = append([]string{"sudo", "-u", "postgres", "-E", c.Path}, c.Args[1:]...)
+			c.Path = sudo
+			old(c)
+		}
+	}
 
 	// Create the database without auth and without fsync.
 	cmd := exec.Command("initdb", pgData, "--nosync", "-E", "UNICODE", "--auth=trust")
