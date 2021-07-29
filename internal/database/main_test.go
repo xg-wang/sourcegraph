@@ -62,6 +62,12 @@ func startEphemeralDB() (dsn string, _ func(), _ error) {
 		}
 	}()
 
+	// HACK: CI doesn't have postgres on the PATH. Hardcode it in until we
+	// update our agents.
+	if os.Getenv("CI") != "" {
+		os.Setenv("PATH", os.Getenv("PATH")+":/usr/lib/postgresql/12/bin")
+	}
+
 	// This only works if postgres is on PATH.
 	if _, err := exec.LookPath("postgres"); err != nil {
 		return "", nil, err
