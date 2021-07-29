@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 	// 4s.
 	dsn, cleanup, err := startEphemeralDB()
 	if err != nil && testing.Verbose() {
-		log.Println("failed to setup ephemeral db:", err)
+		log.Fatal("failed to setup ephemeral db:", err)
 	}
 	if dsn != "" {
 		// Hack, this is the first envvar we read for dbtest.NewDB.
@@ -97,6 +97,8 @@ func startEphemeralDB() (dsn string, _ func(), _ error) {
 	// Create the database without auth and without fsync.
 	cmd := exec.Command("initdb", pgData, "--nosync", "-E", "UNICODE", "--auth=trust")
 	cmd.Env = env
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
 	if err := cmd.Run(); err != nil {
 		return "", nil, err
 	}
