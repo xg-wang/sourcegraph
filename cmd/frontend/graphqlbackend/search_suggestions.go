@@ -215,7 +215,7 @@ func (r *searchResolver) Suggestions(ctx context.Context, args *searchSuggestion
 	// If globbing is activated, convert regex patterns of repo, file, and repohasfile
 	// from "field:^foo$" to "field:^foo".
 	globbing := false
-	if getBoolPtr(r.UserSettings.SearchGlobbing, false) {
+	if getBoolPtr(r.UserSettings.SearchGlobbing, false) { // Want to keep this.
 		globbing = true
 	}
 	if globbing {

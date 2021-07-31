@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	otlog "github.com/opentracing/opentracing-go/log"
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/backend"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
@@ -86,12 +85,7 @@ func NewSearchImplementer(ctx context.Context, db dbutil.DB, args *SearchArgs) (
 	}
 
 	var plan query.Plan
-	globbing := getBoolPtr(settings.SearchGlobbing, false)
-	tr.LogFields(otlog.Bool("globbing", globbing))
-	plan, err = query.Pipeline(
-		query.Init(args.Query, searchType),
-		query.With(globbing, query.Globbing),
-	)
+	plan, err = query.Pipeline(query.Init(args.Query, searchType))
 	if err != nil {
 		return alertForQuery(args.Query, err).wrapSearchImplementer(db), nil
 	}

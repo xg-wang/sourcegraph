@@ -18,7 +18,6 @@ import (
 	"github.com/neelance/parallel"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
@@ -199,25 +198,6 @@ func (sr *SearchResultsResolver) DynamicFilters(ctx context.Context) []*searchFi
 		tr.Finish()
 	}()
 
-	globbing := false
-	// For search, sr.userSettings is set in (r *searchResolver) Results(ctx
-	// context.Context). However we might regress on that or call DynamicFilters from
-	// other code paths. Hence we fallback to accessing the user settings directly.
-	if sr.UserSettings != nil {
-		globbing = getBoolPtr(sr.UserSettings.SearchGlobbing, false)
-	} else {
-		settings, err := decodedViewerFinalSettings(ctx, sr.db)
-		if err != nil {
-			log15.Warn("DynamicFilters: could not get user settings from database")
-		} else {
-			globbing = getBoolPtr(settings.SearchGlobbing, false)
-		}
-	}
-	tr.LogFields(otlog.Bool("globbing", globbing))
-
-	filters := streaming.SearchFilters{
-		Globbing: globbing,
-	}
 	filters.Update(streaming.SearchEvent{
 		Results: sr.Matches,
 		Stats:   sr.Stats,
@@ -1724,7 +1704,7 @@ func compareSearchResults(left, right result.Match, exactFilePatterns map[string
 
 func (r *searchResolver) sortResults(results []result.Match) {
 	var exactPatterns map[string]struct{}
-	if getBoolPtr(r.UserSettings.SearchGlobbing, false) {
+	if getBoolPtr(r.UserSettings.SearchGlobbing, false) { // Want to keep this
 		exactPatterns = r.getExactFilePatterns()
 	}
 	sort.Slice(results, func(i, j int) bool { return compareSearchResults(results[i], results[j], exactPatterns) })

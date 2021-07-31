@@ -261,7 +261,6 @@ func TestAlertForOverRepoLimit(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		globbing  bool
 		repoRevs  int
 		query     string
 		wantAlert *searchAlert
@@ -300,19 +299,6 @@ func TestAlertForOverRepoLimit(t *testing.T) {
 			},
 		},
 		{
-			name:          "should return default alert because globbing is activated",
-			globbing:      true,
-			cancelContext: false,
-			repoRevs:      1,
-			query:         "foo",
-			wantAlert: &searchAlert{
-				prometheusType:  "over_repo_limit",
-				title:           "Too many matching repositories",
-				proposedQueries: nil,
-				description:     "Use a 'repo:' or 'repogroup:' filter to narrow your search and see results.",
-			},
-		},
-		{
 			name:          "this query is not basic, so return a default alert without suggestions",
 			cancelContext: false,
 			repoRevs:      1,
@@ -346,10 +332,7 @@ func TestAlertForOverRepoLimit(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			setMockResolveRepositories(test.repoRevs)
-			plan, err := query.Pipeline(
-				query.InitRegexp(test.query),
-				query.With(test.globbing, query.Globbing),
-			)
+			plan, err := query.Pipeline(query.InitRegexp(test.query))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -359,9 +342,8 @@ func TestAlertForOverRepoLimit(t *testing.T) {
 					OriginalQuery: test.query,
 					Plan:          plan,
 					Query:         plan.ToParseTree(),
-					UserSettings: &schema.Settings{
-						SearchGlobbing: &test.globbing,
-					}},
+					UserSettings:  &schema.Settings{},
+				},
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
