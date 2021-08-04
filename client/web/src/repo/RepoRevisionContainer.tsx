@@ -336,8 +336,8 @@ export const RepoRevisionContainer: React.FunctionComponent<RepoRevisionContaine
                 {() => <CopyPathAction key="copy-path" />}
             </RepoHeaderContributionPortal>
             <RepoHeaderContributionPortal
-                position="right"
-                priority={3}
+                position="left"
+                //                priority={3}
                 id="go-to-permalink"
                 repoHeaderContributionsLifecycleProps={props.repoHeaderContributionsLifecycleProps}
             >
