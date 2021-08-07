@@ -270,24 +270,32 @@ export const SignUpForm: React.FunctionComponent<SignUpFormProps> = ({
                 {context.sourcegraphDotComMode && (
                     <>
                         {externalAuthProviders.length > 0 && <OrDivider className="my-4" />}
-                        {externalAuthProviders.map((provider, index) => (
-                            // Use index as key because display name may not be unique. This is OK
-                            // here because this list will not be updated during this component's lifetime.
-                            <div className="mb-2" key={index}>
-                                <a
-                                    href={provider.authenticationURL}
-                                    className="btn btn-secondary btn-block"
-                                    onClick={onClickExternalAuthSignup(provider.serviceType)}
-                                >
-                                    {provider.serviceType === 'github' ? (
-                                        <GithubIcon className="icon-inline" />
-                                    ) : provider.serviceType === 'gitlab' ? (
-                                        <GitlabIcon className="icon-inline" />
-                                    ) : null}{' '}
-                                    Continue with {provider.displayName}
-                                </a>
-                            </div>
-                        ))}
+                        {externalAuthProviders.map((provider, index) => {
+                            // automatically add code host connection on sign-up
+                            const authenticationURL = provider.authenticationURL
+                                ? `${provider.authenticationURL}&op=createCodeHostConnection`
+                                : ''
+
+                            return (
+                                // Use index as key because display name may not be unique. This is OK
+                                // here because this list will not be updated during this component's lifetime.
+                                // eslint-disable-next-line react/no-array-index-key
+                                <div className="mb-2" key={index}>
+                                    <a
+                                        href={authenticationURL}
+                                        className="btn btn-secondary btn-block"
+                                        onClick={onClickExternalAuthSignup(provider.serviceType)}
+                                    >
+                                        {provider.serviceType === 'github' ? (
+                                            <GithubIcon className="icon-inline" />
+                                        ) : provider.serviceType === 'gitlab' ? (
+                                            <GitlabIcon className="icon-inline" />
+                                        ) : null}{' '}
+                                        Continue with {provider.displayName}
+                                    </a>
+                                </div>
+                            )
+                        })}
                     </>
                 )}
 
