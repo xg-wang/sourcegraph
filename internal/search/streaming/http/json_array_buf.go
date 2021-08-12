@@ -29,7 +29,10 @@ func NewJSONArrayBuf(flushSize int, write func([]byte) error) *JSONArrayBuf {
 // Append marshals v and adds it to the json array buffer. If the size of the
 // buffer exceed FlushSize the buffer is written out.
 func (j *JSONArrayBuf) Append(v interface{}) error {
-	oldLen := j.buf.Len()
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
 
 	if j.buf.Len() == 0 {
 		j.buf.WriteByte('[')
@@ -37,15 +40,8 @@ func (j *JSONArrayBuf) Append(v interface{}) error {
 		j.buf.WriteByte(',')
 	}
 
-	enc := json.NewEncoder(&j.buf)
-	if err := enc.Encode(v); err != nil {
-		// Reset the buffer to where it was before failing to marshal
-		j.buf.Truncate(oldLen)
-		return err
-	}
-
-	// Trim the trailing newline left by the JSON encoder
-	j.buf.Truncate(j.buf.Len() - 1)
+	// err is always nil for a bytes.Buffer
+	_, _ = j.buf.Write(b)
 
 	if j.buf.Len() >= j.FlushSize {
 		return j.Flush()
