@@ -159,7 +159,8 @@ type IndexedSearchRequest struct {
 	DisableUnindexedSearch bool
 
 	// Inputs
-	Args *search.ZoektParameters
+	RepoSet search.IndexedRepoSet
+	Args    *search.ZoektParameters
 
 	// RepoRevs is the repository revisions that are indexed and will be
 	// searched.
@@ -185,7 +186,8 @@ func (s *IndexedSearchRequest) Search(ctx context.Context, c streaming.Sender) e
 	}
 
 	if s.Args.Mode == search.ZoektGlobalSearch {
-		q := zoektGlobalQuery(ctx, s.Args.Query, s.Args.RepoOptions, s.Args.UserPrivateRepos)
+		repoSet := s.RepoSet.(*search.IndexedRepoUniverse)
+		q := zoektGlobalQuery(ctx, s.Args.Query, repoSet.RepoOptions, repoSet.UserPrivateRepos)
 		return doZoektSearchGlobal(ctx, q, s.Args.Typ, s.Args.Zoekt.Client, s.Args.FileMatchLimit, s.Args.Select, c)
 	}
 
@@ -306,18 +308,16 @@ func NewIndexedSearchRequest(ctx context.Context, args *search.TextParameters, t
 
 	return &IndexedSearchRequest{
 		Args: &search.ZoektParameters{
-			Repos:            args.Repos,
-			Query:            q,
-			Typ:              typ,
-			FileMatchLimit:   args.PatternInfo.FileMatchLimit,
-			Enabled:          args.Zoekt.Enabled(),
-			Index:            args.PatternInfo.Index,
-			Mode:             args.Mode,
-			RepoOptions:      args.RepoOptions,
-			UserPrivateRepos: args.UserPrivateRepos,
-			Select:           args.PatternInfo.Select,
-			Zoekt:            args.Zoekt,
+			Query:          q,
+			Typ:            typ,
+			FileMatchLimit: args.PatternInfo.FileMatchLimit,
+			Enabled:        args.Zoekt.Enabled(),
+			Index:          args.PatternInfo.Index,
+			Mode:           args.Mode,
+			Select:         args.PatternInfo.Select,
+			Zoekt:          args.Zoekt,
 		},
+		RepoSet: search.IndexedRepoSubset(args.Repos),
 
 		Unindexed: limitUnindexedRepos(searcherRepos, maxUnindexedRepoRevSearchesPerQuery, onMissing),
 		RepoRevs:  indexed,

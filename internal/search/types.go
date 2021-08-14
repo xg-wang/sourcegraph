@@ -138,19 +138,34 @@ const (
 
 // ZoektParameters contains all the inputs to run a Zoekt indexed search.
 type ZoektParameters struct {
-	Repos            []*RepositoryRevisions
-	RepoOptions      RepoOptions
-	Query            zoektquery.Q
-	Typ              IndexedRequestType
-	FileMatchLimit   int32
-	Enabled          bool
-	Index            query.YesNoOnly
-	Mode             GlobalSearchMode
-	UserPrivateRepos []types.RepoName
-	Select           filter.SelectPath
+	Query          zoektquery.Q
+	Typ            IndexedRequestType
+	FileMatchLimit int32
+	Enabled        bool
+	Index          query.YesNoOnly
+	Mode           GlobalSearchMode
+	Select         filter.SelectPath
 
 	Zoekt *searchbackend.Zoekt
 }
+
+// IndexedRepoSet represents the indexed set of repositories to search.
+type IndexedRepoSet interface {
+	repoSet()
+}
+
+func (IndexedRepoUniverse) repoSet() {}
+func (IndexedRepoSubset) repoSet()   {}
+
+// IndexedRepoUniverse represents inputs needed to resolve the universe of repositories
+// to search for so-called Global search queries.
+type IndexedRepoUniverse struct {
+	RepoOptions      RepoOptions
+	UserPrivateRepos []types.RepoName
+}
+
+// IndexedRepoSubset represents the subset of repository revisions to search.
+type IndexedRepoSubset []*RepositoryRevisions
 
 // TextParameters are the parameters passed to a search backend. It contains the Pattern
 // to search for, as well as the hydrated list of repository revisions to
