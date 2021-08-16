@@ -15,7 +15,9 @@ type WorkerMetrics struct {
 }
 
 type operations struct {
-	handle *observation.Operation
+	handle     *observation.Operation
+	postHandle *observation.Operation
+	preHandle  *observation.Operation
 }
 
 // NewMetrics creates and registers the following metrics for a generic worker instance.
@@ -72,6 +74,8 @@ func newOperations(observationContext *observation.Context, prefix string, keys,
 	}
 
 	return &operations{
-		handle: op("Handle"),
+		handle:     op("Handle"),
+		postHandle: op("PostHandle"),
+		preHandle:  op("PreHandle"),
 	}
 }
