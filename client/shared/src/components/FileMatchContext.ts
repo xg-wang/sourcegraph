@@ -121,7 +121,7 @@ export const calculateMatchGroups = (
     matches: MatchItem[],
     maxMatches: number,
     context: number
-): [MatchItem[], MatchGroup[]] => {
+): MatchGroup[] => {
     const sortedMatches = matches.sort((a, b) => {
         if (a.line < b.line) {
             return -1
@@ -153,7 +153,7 @@ export const calculateMatchGroups = (
             maxMatches === 0 || index < maxMatches || match.line <= highestLineNumberWithinSubsetMatches + context
     )
 
-    const grouped = mergeContext(
+    return mergeContext(
         context,
         flatMap(showMatches, (match, index) =>
             match.highlightRanges.map(range => ({
@@ -164,6 +164,4 @@ export const calculateMatchGroups = (
             }))
         )
     ).map(group => calculateGroupPositions(group, context, highestLineNumberWithinSubsetMatches))
-
-    return [showMatches, grouped]
 }
