@@ -58,8 +58,6 @@ func textSearchRequest(ctx context.Context, args *search.TextParameters, onMissi
 				RepoOptions:      args.RepoOptions,
 				UserPrivateRepos: args.UserPrivateRepos,
 			},
-
-			RepoRevs: &zoektutil.IndexedRepoRevs{},
 		}, nil
 	}
 	return zoektutil.NewIndexedSearchRequest(ctx, args, search.TextRequest, onMissing)

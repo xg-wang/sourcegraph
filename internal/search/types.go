@@ -154,8 +154,8 @@ type IndexedRepoSet interface {
 	repoSet()
 }
 
-func (IndexedRepoUniverse) repoSet() {}
-func (IndexedRepoSubset) repoSet()   {}
+func (IndexedRepoUniverse) repoSet()  {}
+func (IndexedRepoRevSubset) repoSet() {}
 
 // IndexedRepoUniverse represents inputs needed to resolve the universe of repositories
 // to search for so-called Global search queries.
@@ -164,8 +164,20 @@ type IndexedRepoUniverse struct {
 	UserPrivateRepos []types.RepoName
 }
 
-// IndexedRepoSubset represents the subset of repository revisions to search.
-type IndexedRepoSubset []*RepositoryRevisions
+// IndexedRepoRevSubset creates both the Sourcegraph and Zoekt representation of a
+// list of repository and refs to search.
+type IndexedRepoRevSubset struct {
+	// RepoRevs is the Sourcegraph representation of a the list of RepoRevs
+	// repository and revisions to search.
+	RepoRevs map[string]*RepositoryRevisions
+
+	// RepoBranches will be used when we query zoekt. The order of branches
+	// must match that in a reporev such that we can map back results. IE this
+	// invariant is maintained:
+	//
+	// RepoBranches[reporev.Repo.Name][i] <-> reporev.Revs[i]
+	RepoBranches map[string][]string
+}
 
 // TextParameters are the parameters passed to a search backend. It contains the Pattern
 // to search for, as well as the hydrated list of repository revisions to
