@@ -35,6 +35,7 @@ var textSearchLimiter = mutablelimiter.New(32)
 
 var MockSearchFilesInRepos func(args *search.TextParameters) ([]result.Match, *streaming.Stats, error)
 
+// Make this return a variant on IndexedSearchRequest.
 func textSearchRequest(ctx context.Context, args *search.TextParameters, onMissing zoektutil.OnMissingRepoRevs) (*zoektutil.IndexedSearchRequest, error) {
 	// performance: for global searches, we avoid calling NewIndexedSearchRequest
 	// because zoekt will anyway have to search all its shards.
