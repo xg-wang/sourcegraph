@@ -45,18 +45,20 @@ func textSearchRequest(ctx context.Context, args *search.TextParameters, onMissi
 		}
 		return &zoektutil.IndexedSearchRequest{
 			Args: &search.ZoektParameters{
-				Repos:            args.Repos,
-				Query:            q,
-				Typ:              search.TextRequest,
-				FileMatchLimit:   args.PatternInfo.FileMatchLimit,
-				Enabled:          args.Zoekt.Enabled(),
-				Index:            args.PatternInfo.Index,
-				Mode:             args.Mode,
+				Query:          q,
+				Typ:            search.TextRequest,
+				FileMatchLimit: args.PatternInfo.FileMatchLimit,
+				Enabled:        args.Zoekt.Enabled(),
+				Index:          args.PatternInfo.Index,
+				Mode:           args.Mode,
+				Select:         args.PatternInfo.Select,
+				Zoekt:          args.Zoekt,
+			},
+			RepoSet: &search.IndexedRepoUniverse{
 				RepoOptions:      args.RepoOptions,
 				UserPrivateRepos: args.UserPrivateRepos,
-				Select:           args.PatternInfo.Select,
-				Zoekt:            args.Zoekt,
 			},
+
 			RepoRevs: &zoektutil.IndexedRepoRevs{},
 		}, nil
 	}
