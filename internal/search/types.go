@@ -136,18 +136,15 @@ const (
 	SymbolRequest IndexedRequestType = "symbol"
 )
 
-// ZoektParameters contains all the inputs to run a Zoekt indexed search.
+// ZoektParameters represents shared inputs to run a Zoekt indexed search. // FIXME move `IndexedSearchRequestIntf` here.
 type ZoektParameters struct {
-	Repos            []*RepositoryRevisions
-	RepoOptions      RepoOptions
-	Query            zoektquery.Q
-	Typ              IndexedRequestType
-	FileMatchLimit   int32
-	Enabled          bool
-	Index            query.YesNoOnly
-	Mode             GlobalSearchMode
-	UserPrivateRepos []types.RepoName
-	Select           filter.SelectPath
+	Query          zoektquery.Q
+	Typ            IndexedRequestType
+	FileMatchLimit int32
+	Enabled        bool
+	Index          query.YesNoOnly
+	Mode           GlobalSearchMode
+	Select         filter.SelectPath
 
 	Zoekt *backend.Zoekt
 }
