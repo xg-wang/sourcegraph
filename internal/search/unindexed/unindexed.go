@@ -35,7 +35,7 @@ var textSearchLimiter = mutablelimiter.New(32)
 
 var MockSearchFilesInRepos func(args *search.TextParameters) ([]result.Match, *streaming.Stats, error)
 
-func textSearchRequest(ctx context.Context, args *search.TextParameters, onMissing zoektutil.OnMissingRepoRevs) (zoektutil.IndexedSearchRequest, error) {
+func TextSearchRequest(ctx context.Context, args *search.TextParameters, onMissing zoektutil.OnMissingRepoRevs) (zoektutil.IndexedSearchRequest, error) {
 	if args.Mode == search.ZoektGlobalSearch {
 		// performance: optimize global searches where Zoekt searches
 		// all shards anyway.
@@ -45,52 +45,47 @@ func textSearchRequest(ctx context.Context, args *search.TextParameters, onMissi
 }
 
 // SearchFilesInRepos searches a set of repos for a pattern.
-func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream streaming.Sender) (err error) {
-	if MockSearchFilesInRepos != nil {
-		matches, mockStats, err := MockSearchFilesInRepos(args)
-		stream.Send(streaming.SearchEvent{
-			Results: matches,
-			Stats:   mockStats.Deref(),
-		})
-		return err
-	}
+func SearchFilesInRepos(ctx context.Context, searcherArgs *search.SearcherParameters, zoektRequest zoektutil.IndexedSearchRequest, mode search.GlobalSearchMode, stream streaming.Sender) (err error) {
+	// FIXME
+	/*
+		if MockSearchFilesInRepos != nil {
+			matches, mockStats, err := MockSearchFilesInRepos(args)
+			stream.Send(streaming.SearchEvent{
+				Results: matches,
+				Stats:   mockStats.Deref(),
+			})
+			return err
+		}
+	*/
 
-	ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(args.PatternInfo.FileMatchLimit))
-	defer cleanup()
+	// FIXME separately
+	/*
+		ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(args.PatternInfo.FileMatchLimit))
+		defer cleanup()
 
-	tr, ctx := trace.New(ctx, "searchFilesInRepos", fmt.Sprintf("query: %s", args.PatternInfo.Pattern))
-	defer func() {
-		tr.SetErrorIfNotContext(err)
-		tr.Finish()
-	}()
-	tr.LogFields(
-		trace.Stringer("query", args.Query),
-		trace.Stringer("info", args.PatternInfo),
-		trace.Stringer("global_search_mode", args.Mode),
-	)
-
-	request, err := textSearchRequest(ctx, args, zoektutil.MissingRepoRevStatus(stream))
-	if err != nil {
-		return err
-	}
-
+		tr, ctx := trace.New(ctx, "searchFilesInRepos", fmt.Sprintf("query: %s", args.PatternInfo.Pattern))
+		defer func() {
+			tr.SetErrorIfNotContext(err)
+			tr.Finish()
+		}()
+		tr.LogFields(
+			trace.Stringer("query", args.Query),
+			trace.Stringer("info", args.PatternInfo),
+			trace.Stringer("global_search_mode", args.Mode),
+		)
+	*/
 	g, ctx := errgroup.WithContext(ctx)
 
-	if args.Mode != search.SearcherOnly {
+	if mode != search.SearcherOnly {
 		// Run literal and regexp searches on indexed repositories.
 		g.Go(func() error {
-			return request.Search(ctx, stream)
+			return zoektRequest.Search(ctx, stream)
 		})
 	}
 
 	// Concurrently run searcher for all unindexed repos regardless whether text or regexp.
 	g.Go(func() error {
-		searcherArgs := &search.SearcherParameters{
-			SearcherURLs:    args.SearcherURLs,
-			PatternInfo:     args.PatternInfo,
-			UseFullDeadline: args.UseFullDeadline,
-		}
-		return callSearcherOverRepos(ctx, searcherArgs, stream, request.UnindexedRepos(), false)
+		return callSearcherOverRepos(ctx, searcherArgs, stream, zoektRequest.UnindexedRepos(), false)
 	})
 
 	return g.Wait()
@@ -100,7 +95,16 @@ func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 // which collects the results from the stream.
 func SearchFilesInReposBatch(ctx context.Context, args *search.TextParameters) ([]*result.FileMatch, streaming.Stats, error) {
 	matches, stats, err := streaming.CollectStream(func(stream streaming.Sender) error {
-		return SearchFilesInRepos(ctx, args, stream)
+		zoektRequest, err := TextSearchRequest(ctx, args, zoektutil.MissingRepoRevStatus(stream))
+		if err != nil {
+			return err
+		}
+		searcherArgs := &search.SearcherParameters{
+			SearcherURLs:    args.SearcherURLs,
+			PatternInfo:     args.PatternInfo,
+			UseFullDeadline: args.UseFullDeadline,
+		}
+		return SearchFilesInRepos(ctx, searcherArgs, zoektRequest, args.Mode, stream)
 	})
 
 	fms, fmErr := matchesToFileMatches(matches)
