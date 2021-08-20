@@ -175,17 +175,12 @@ func (s *IndexedUniverseSearchRequest) UnindexedRepos() []*search.RepositoryRevi
 	return nil
 }
 
-func NewIndexedUniverseSearchRequest(ctx context.Context, args *search.TextParameters, repoOptions search.RepoOptions, userPrivateRepos []types.RepoName) (_ *IndexedUniverseSearchRequest, err error) {
+func NewIndexedUniverseSearchRequest(ctx context.Context, q zoektquery.Q, args *search.TextParameters, repoOptions search.RepoOptions, userPrivateRepos []types.RepoName) (_ *IndexedUniverseSearchRequest, err error) {
 	tr, _ := trace.New(ctx, "NewIndexedUniverseSearchRequest", "text")
 	defer func() {
 		tr.SetError(err)
 		tr.Finish()
 	}()
-
-	q, err := search.QueryToZoektQuery(args.PatternInfo, false)
-	if err != nil {
-		return nil, err
-	}
 
 	return &IndexedUniverseSearchRequest{
 		RepoOptions:      repoOptions,
@@ -286,7 +281,7 @@ func MissingRepoRevStatus(stream streaming.Sender) OnMissingRepoRevs {
 	}
 }
 
-func NewIndexedSubsetSearchRequest(ctx context.Context, args *search.TextParameters, typ search.IndexedRequestType, onMissing OnMissingRepoRevs) (_ *IndexedSubsetSearchRequest, err error) {
+func NewIndexedSubsetSearchRequest(ctx context.Context, q zoektquery.Q, args *search.TextParameters, typ search.IndexedRequestType, onMissing OnMissingRepoRevs) (_ *IndexedSubsetSearchRequest, err error) {
 	tr, ctx := trace.New(ctx, "NewIndexedSubsetSearchRequest", string(typ))
 	tr.LogFields(trace.Stringer("global_search_mode", args.Mode))
 	defer func() {
@@ -364,11 +359,6 @@ func NewIndexedSubsetSearchRequest(ctx context.Context, args *search.TextParamet
 	// Disable unindexed search
 	if args.PatternInfo.Index == query.Only {
 		searcherRepos = limitUnindexedRepos(searcherRepos, 0, onMissing)
-	}
-
-	q, err := search.QueryToZoektQuery(args.PatternInfo, typ == search.SymbolRequest)
-	if err != nil {
-		return nil, err
 	}
 
 	return &IndexedSubsetSearchRequest{
