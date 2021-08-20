@@ -73,27 +73,42 @@ func repoSets(request zoektutil.IndexedSearchRequest, mode search.GlobalSearchMo
 	return repoSets
 }
 
+// getting request depends on ctx which is parameterized by file match limit. also stream, but we probably don't need WithLimit before that for stream. we need it for ctx.
+// then, args has a file match value inside that determines request. but this doesn't matter either. so
+// all we _really_ need is to parameterize TextSearchRequest with a context on construction -> to do with limit.
+// so we need TextSearchRequest with limit.
+
+// TextSearchRequest(ctx context.Context, args *search.TextParameters, onMissing zoektutil.OnMissingRepoRevs) (zoektutil.IndexedSearchRequest, error)
+
 // streamStructuralSearch runs structural search jobs and streams the results.
 func streamStructuralSearch(ctx context.Context, args *search.TextParameters, fileMatchLimit int32, stream streaming.Sender) (err error) {
-	ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(fileMatchLimit))
-	defer cleanup()
-
-	request, err := TextSearchRequest(ctx, args, zoektutil.MissingRepoRevStatus(stream))
-	if err != nil {
-		return err
+	g := func(ctx context.Context) (zoektutil.IndexedSearchRequest, error) {
+		return TextSearchRequest(ctx, args, zoektutil.MissingRepoRevStatus(stream))
 	}
 
-	jobs := []*searchRepos{}
-	for _, repoSet := range repoSets(request, args.Mode) {
-		searcherArgs := &search.SearcherParameters{
-			SearcherURLs:    args.SearcherURLs,
-			PatternInfo:     args.PatternInfo,
-			UseFullDeadline: args.UseFullDeadline,
+	f := func() error {
+		ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(fileMatchLimit))
+		defer cleanup()
+
+		request, err := g(ctx)
+		if err != nil {
+			return err
 		}
+		repos := repoSets(request, args.Mode)
 
-		jobs = append(jobs, &searchRepos{args: searcherArgs, stream: stream, repoSet: repoSet})
+		jobs := []*searchRepos{}
+		for _, repoSet := range repos {
+			searcherArgs := &search.SearcherParameters{
+				SearcherURLs:    args.SearcherURLs,
+				PatternInfo:     args.PatternInfo,
+				UseFullDeadline: args.UseFullDeadline,
+			}
+
+			jobs = append(jobs, &searchRepos{args: searcherArgs, stream: stream, repoSet: repoSet})
+		}
+		return runJobs(ctx, jobs)
 	}
-	return runJobs(ctx, jobs)
+	return f()
 }
 
 // retryStructuralSearch runs a structural search with an updated file match limit so
