@@ -42,7 +42,6 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/search/run"
 	"github.com/sourcegraph/sourcegraph/internal/search/searchcontexts"
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
-	"github.com/sourcegraph/sourcegraph/internal/search/zoekt"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 	"github.com/sourcegraph/sourcegraph/internal/trace/ot"
 	"github.com/sourcegraph/sourcegraph/internal/types"
@@ -1560,22 +1559,13 @@ func (r *searchResolver) doResults(ctx context.Context, args *search.TextParamet
 		wg.Add(1)
 		goroutine.Go(func() {
 			defer wg.Done()
-
-			getRepos := func(ctx context.Context) (zoekt.IndexedSearchRequest, error) {
-				request, err := unindexed.TextSearchRequest(ctx, args, zoekt.MissingRepoRevStatus(agg))
-				if err != nil {
-					return nil, err
-				}
-				return request, nil
-
-			}
-
+			repoFetcher := unindexed.NewRepoFetcher(agg, args)
 			searcherArgs := &search.SearcherParameters{
 				SearcherURLs:    args.SearcherURLs,
 				PatternInfo:     args.PatternInfo,
 				UseFullDeadline: args.UseFullDeadline,
 			}
-			_ = agg.DoStructuralSearch(ctx, searcherArgs, getRepos, args.PatternInfo.FileMatchLimit, args.Mode)
+			_ = agg.DoStructuralSearch(ctx, searcherArgs, repoFetcher, args.PatternInfo.FileMatchLimit)
 		})
 	}
 

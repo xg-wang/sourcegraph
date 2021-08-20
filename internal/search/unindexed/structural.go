@@ -8,19 +8,12 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/search"
 	"github.com/sourcegraph/sourcegraph/internal/search/result"
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
-	zoektutil "github.com/sourcegraph/sourcegraph/internal/search/zoekt"
+	"github.com/sourcegraph/sourcegraph/internal/search/zoekt"
 	"golang.org/x/sync/errgroup"
 )
 
-// mint function that returns getRepos from text args? maybe this isn't the worst idea,
-// because i can use it during query construction...
-
-// A RepoQuery is a function that returns RepoData, and parameterized by a
-// context for cancellation.
-type RepoQuery func(context.Context) (zoektutil.IndexedSearchRequest, error)
-
-// RepoData represents an object of repository revisions to search.
-type RepoData interface {
+// repoData represents an object of repository revisions to search.
+type repoData interface {
 	AsList() []*search.RepositoryRevisions
 	IsIndexed() bool
 }
@@ -52,8 +45,34 @@ func (UnindexedList) IsIndexed() bool {
 // searchRepos represent the arguments to a search called over repositories.
 type searchRepos struct {
 	args    *search.SearcherParameters
-	repoSet RepoData
+	repoSet repoData
 	stream  streaming.Sender
+}
+
+type RepoFetcher struct {
+	args              *search.TextParameters
+	mode              search.GlobalSearchMode
+	onMissingRepoRevs zoekt.OnMissingRepoRevs
+}
+
+func NewRepoFetcher(stream streaming.Sender, args *search.TextParameters) *RepoFetcher {
+	return &RepoFetcher{
+		mode:              args.Mode,
+		args:              args,
+		onMissingRepoRevs: zoekt.MissingRepoRevStatus(stream),
+	}
+}
+
+func (r *RepoFetcher) Get(ctx context.Context) ([]repoData, error) {
+	request, err := TextSearchRequest(ctx, r.args, r.onMissingRepoRevs)
+	if err != nil {
+		return nil, err
+	}
+	repoSets := []repoData{UnindexedList(request.UnindexedRepos())} // unindexed included by default
+	if r.mode != search.SearcherOnly {
+		repoSets = append(repoSets, IndexedMap(request.IndexedRepos()))
+	}
+	return repoSets, nil
 }
 
 // getJob returns a function parameterized by ctx to search over repos.
@@ -71,27 +90,18 @@ func runJobs(ctx context.Context, jobs []*searchRepos) error {
 	return g.Wait()
 }
 
-// repoSets returns the set of repositories to search (whether indexed or unindexed) based on search mode.
-func repoSets(request zoektutil.IndexedSearchRequest, mode search.GlobalSearchMode) []RepoData {
-	repoSets := []RepoData{UnindexedList(request.UnindexedRepos())} // unindexed included by default
-	if mode != search.SearcherOnly {
-		repoSets = append(repoSets, IndexedMap(request.IndexedRepos()))
-	}
-	return repoSets
-}
-
 // streamStructuralSearch runs structural search jobs and streams the results.
-func streamStructuralSearch(ctx context.Context, args *search.SearcherParameters, getRepos RepoQuery, fileMatchLimit int32, mode search.GlobalSearchMode, stream streaming.Sender) (err error) {
+func streamStructuralSearch(ctx context.Context, args *search.SearcherParameters, repoFetcher *RepoFetcher, fileMatchLimit int32, stream streaming.Sender) (err error) {
 	ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(fileMatchLimit))
 	defer cleanup()
 
-	repos, err := getRepos(ctx)
+	repos, err := repoFetcher.Get(ctx)
 	if err != nil {
 		return err
 	}
 
 	jobs := []*searchRepos{}
-	for _, repoSet := range repoSets(repos, mode) {
+	for _, repoSet := range repos {
 		jobs = append(jobs, &searchRepos{args: args, stream: stream, repoSet: repoSet})
 	}
 	return runJobs(ctx, jobs)
@@ -99,32 +109,32 @@ func streamStructuralSearch(ctx context.Context, args *search.SearcherParameters
 
 // retryStructuralSearch runs a structural search with an updated file match limit so
 // that Zoekt resolves more potential file matches.
-func retryStructuralSearch(ctx context.Context, args *search.SearcherParameters, getRepos RepoQuery, fileMatchLimit int32, mode search.GlobalSearchMode, stream streaming.Sender) error {
+func retryStructuralSearch(ctx context.Context, args *search.SearcherParameters, repoFetcher *RepoFetcher, fileMatchLimit int32, stream streaming.Sender) error {
 	patternCopy := *(args.PatternInfo)
 	patternCopy.FileMatchLimit = fileMatchLimit
 	argsCopy := *args
 	argsCopy.PatternInfo = &patternCopy
 	args = &argsCopy
-	return streamStructuralSearch(ctx, args, getRepos, fileMatchLimit, mode, stream)
+	return streamStructuralSearch(ctx, args, repoFetcher, fileMatchLimit, stream)
 }
 
-func StructuralSearch(ctx context.Context, args *search.SearcherParameters, getRepos RepoQuery, fileMatchLimit int32, mode search.GlobalSearchMode, stream streaming.Sender) error {
+func StructuralSearch(ctx context.Context, args *search.SearcherParameters, repoFetcher *RepoFetcher, fileMatchLimit int32, stream streaming.Sender) error {
 	if fileMatchLimit != search.DefaultMaxSearchResults {
 		// streamStructuralSearch performs a streaming search when the user sets a value
 		// for `count`. The first return parameter indicates whether the request was
 		// serviced with streaming.
-		return streamStructuralSearch(ctx, args, getRepos, fileMatchLimit, mode, stream)
+		return streamStructuralSearch(ctx, args, repoFetcher, fileMatchLimit, stream)
 	}
 
 	// For structural search with default limits we retry if we get no results.
 	fileMatches, stats, err := streaming.CollectStream(func(stream streaming.Sender) error {
-		return streamStructuralSearch(ctx, args, getRepos, fileMatchLimit, mode, stream)
+		return streamStructuralSearch(ctx, args, repoFetcher, fileMatchLimit, stream)
 	})
 
 	if len(fileMatches) == 0 && err == nil {
 		// retry structural search with a higher limit.
 		fileMatches, stats, err = streaming.CollectStream(func(stream streaming.Sender) error {
-			return retryStructuralSearch(ctx, args, getRepos, 1000, mode, stream)
+			return retryStructuralSearch(ctx, args, repoFetcher, 1000, stream)
 		})
 		if err != nil {
 			return err

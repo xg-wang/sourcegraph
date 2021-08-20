@@ -91,16 +91,16 @@ func (a *Aggregator) DoSymbolSearch(ctx context.Context, args *search.TextParame
 	return errors.Wrap(err, "symbol search failed")
 }
 
-func (a *Aggregator) DoStructuralSearch(ctx context.Context, searcherArgs *search.SearcherParameters, getRepos unindexed.RepoQuery, fileMatchLimit int32, mode search.GlobalSearchMode) (err error) {
+func (a *Aggregator) DoStructuralSearch(ctx context.Context, searcherArgs *search.SearcherParameters, repoFetcher *unindexed.RepoFetcher, fileMatchLimit int32) (err error) {
 	tr, ctx := trace.New(ctx, "doStructuralSearch", "")
-	tr.LogFields(trace.Stringer("global_search_mode", mode))
+	// tr.LogFields(trace.Stringer("global_search_mode", mode)) // XXX mode
 	defer func() {
 		a.Error(err)
 		tr.SetErrorIfNotContext(err)
 		tr.Finish()
 	}()
 
-	err = unindexed.StructuralSearch(ctx, searcherArgs, getRepos, fileMatchLimit, mode, a)
+	err = unindexed.StructuralSearch(ctx, searcherArgs, repoFetcher, fileMatchLimit, a)
 	return errors.Wrap(err, "structural search failed")
 }
 
