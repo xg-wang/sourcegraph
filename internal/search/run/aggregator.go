@@ -15,7 +15,6 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
 	"github.com/sourcegraph/sourcegraph/internal/search/symbol"
 	"github.com/sourcegraph/sourcegraph/internal/search/unindexed"
-	"github.com/sourcegraph/sourcegraph/internal/search/zoekt"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 )
 
@@ -92,28 +91,16 @@ func (a *Aggregator) DoSymbolSearch(ctx context.Context, args *search.TextParame
 	return errors.Wrap(err, "symbol search failed")
 }
 
-func (a *Aggregator) DoStructuralSearch(ctx context.Context, searcherArgs *search.SearcherParameters, args *search.TextParameters) (err error) {
+func (a *Aggregator) DoStructuralSearch(ctx context.Context, searcherArgs *search.SearcherParameters, getRepos unindexed.RepoQuery, fileMatchLimit int32, mode search.GlobalSearchMode) (err error) {
 	tr, ctx := trace.New(ctx, "doStructuralSearch", "")
-	tr.LogFields(trace.Stringer("global_search_mode", args.Mode))
+	tr.LogFields(trace.Stringer("global_search_mode", mode))
 	defer func() {
 		a.Error(err)
 		tr.SetErrorIfNotContext(err)
 		tr.Finish()
 	}()
 
-	getRepos := func(ctx context.Context) ([]unindexed.RepoData, error) {
-		request, err := unindexed.TextSearchRequest(ctx, args, zoekt.MissingRepoRevStatus(a)) // XXX: Want this args to not be TextParameters.
-		if err != nil {
-			return nil, err
-		}
-		repoSets := []unindexed.RepoData{unindexed.UnindexedList(request.UnindexedRepos())} // unindexed included by default
-		if args.Mode != search.SearcherOnly {                                               // XXX we can construct this outside of this function now.
-			repoSets = append(repoSets, unindexed.IndexedMap(request.IndexedRepos()))
-		}
-		return repoSets, nil
-	}
-
-	err = unindexed.StructuralSearch(ctx, searcherArgs, getRepos, args.PatternInfo.FileMatchLimit, a)
+	err = unindexed.StructuralSearch(ctx, searcherArgs, getRepos, fileMatchLimit, mode, a)
 	return errors.Wrap(err, "structural search failed")
 }
 

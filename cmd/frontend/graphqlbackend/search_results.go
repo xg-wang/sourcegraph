@@ -21,6 +21,7 @@ import (
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/sourcegraph/sourcegraph/internal/search/unindexed"
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/envvar"
 	searchlogs "github.com/sourcegraph/sourcegraph/cmd/frontend/internal/search/logs"
@@ -41,6 +42,7 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/search/run"
 	"github.com/sourcegraph/sourcegraph/internal/search/searchcontexts"
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
+	"github.com/sourcegraph/sourcegraph/internal/search/zoekt"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 	"github.com/sourcegraph/sourcegraph/internal/trace/ot"
 	"github.com/sourcegraph/sourcegraph/internal/types"
@@ -1559,12 +1561,21 @@ func (r *searchResolver) doResults(ctx context.Context, args *search.TextParamet
 		goroutine.Go(func() {
 			defer wg.Done()
 
+			getRepos := func(ctx context.Context) (zoekt.IndexedSearchRequest, error) {
+				request, err := unindexed.TextSearchRequest(ctx, args, zoekt.MissingRepoRevStatus(agg))
+				if err != nil {
+					return nil, err
+				}
+				return request, nil
+
+			}
+
 			searcherArgs := &search.SearcherParameters{
 				SearcherURLs:    args.SearcherURLs,
 				PatternInfo:     args.PatternInfo,
 				UseFullDeadline: args.UseFullDeadline,
 			}
-			_ = agg.DoStructuralSearch(ctx, searcherArgs, args)
+			_ = agg.DoStructuralSearch(ctx, searcherArgs, getRepos, args.PatternInfo.FileMatchLimit, args.Mode)
 		})
 	}
 
