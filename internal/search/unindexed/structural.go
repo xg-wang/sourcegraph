@@ -82,19 +82,22 @@ func repoSets(request zoektutil.IndexedSearchRequest, mode search.GlobalSearchMo
 
 // streamStructuralSearch runs structural search jobs and streams the results.
 func streamStructuralSearch(ctx context.Context, args *search.TextParameters, fileMatchLimit int32, stream streaming.Sender) (err error) {
-	g := func(ctx context.Context) (zoektutil.IndexedSearchRequest, error) {
-		return TextSearchRequest(ctx, args, zoektutil.MissingRepoRevStatus(stream))
+	g := func(ctx context.Context) ([]repoData, error) {
+		request, err := TextSearchRequest(ctx, args, zoektutil.MissingRepoRevStatus(stream))
+		if err != nil {
+			return nil, err
+		}
+		return repoSets(request, args.Mode), nil
 	}
 
 	f := func() error {
 		ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(fileMatchLimit))
 		defer cleanup()
 
-		request, err := g(ctx)
+		repos, err := g(ctx)
 		if err != nil {
 			return err
 		}
-		repos := repoSets(request, args.Mode)
 
 		jobs := []*searchRepos{}
 		for _, repoSet := range repos {
