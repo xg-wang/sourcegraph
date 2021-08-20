@@ -130,7 +130,7 @@ func retryStructuralSearch(ctx context.Context, args *search.SearcherParameters,
 	return streamStructuralSearch(ctx, args, repoFetcher, stream)
 }
 
-func StructuralSearch(ctx context.Context, args *search.SearcherParameters, repoFetcher *RepoFetcher, stream streaming.Sender) error {
+func structuralSearch(ctx context.Context, args *search.SearcherParameters, repoFetcher *RepoFetcher, stream streaming.Sender) error {
 	if args.PatternInfo.FileMatchLimit != search.DefaultMaxSearchResults {
 		// streamStructuralSearch performs a streaming search when the user sets a value
 		// for `count`. The first return parameter indicates whether the request was
@@ -172,4 +172,15 @@ func StructuralSearch(ctx context.Context, args *search.SearcherParameters, repo
 		Stats:   stats,
 	})
 	return err
+}
+
+type StructuralSearch struct {
+	repoFetcher  RepoFetcher
+	mode         search.GlobalSearchMode
+	searcherArgs search.SearcherParameters
+	stream       streaming.Sender
+}
+
+func (s *StructuralSearch) Run(ctx context.Context) error {
+	return structuralSearch(ctx, &s.searcherArgs, &s.repoFetcher, s.stream)
 }

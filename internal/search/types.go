@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,14 +19,13 @@ import (
 	"github.com/sourcegraph/sourcegraph/schema"
 )
 
-type TypeParameters interface {
-	typeParametersValue()
+// Runner is an interface shared by all search backends. Calling Run on search
+// objects runs the search.
+type Runner interface {
+	Run(context.Context) error
 }
 
-func (CommitParameters) typeParametersValue()  {}
-func (DiffParameters) typeParametersValue()    {}
-func (SymbolsParameters) typeParametersValue() {}
-func (TextParameters) typeParametersValue()    {}
+//struct Generic struct {}
 
 type CommitParameters struct {
 	RepoRevs           *RepositoryRevisions
