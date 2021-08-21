@@ -597,8 +597,8 @@ func (r *searchResolver) toSearchInputs(q query.Q) (*search.TextParameters, []st
 
 	if r.PatternType == query.SearchTypeStructural && p.Pattern != "" {
 		jobs = append(jobs, &unindexed.StructuralSearch{
-			Args: args,
-			Mode: args.Mode,
+			RepoFetcher: unindexed.NewRepoFetcher(r.stream, &args),
+			Mode:        args.Mode,
 			SearcherArgs: search.SearcherParameters{
 				SearcherURLs:    args.SearcherURLs,
 				PatternInfo:     args.PatternInfo,

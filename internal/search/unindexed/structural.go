@@ -58,8 +58,8 @@ type RepoFetcher struct {
 	onMissingRepoRevs zoektutil.OnMissingRepoRevs
 }
 
-func NewRepoFetcher(stream streaming.Sender, args *search.TextParameters) *RepoFetcher {
-	return &RepoFetcher{
+func NewRepoFetcher(stream streaming.Sender, args *search.TextParameters) RepoFetcher {
+	return RepoFetcher{
 		mode:              args.Mode,
 		args:              args,
 		onMissingRepoRevs: zoektutil.MissingRepoRevStatus(stream),
@@ -175,11 +175,11 @@ func runStructuralSearch(ctx context.Context, args *search.SearcherParameters, r
 }
 
 type StructuralSearch struct {
-	Args         search.TextParameters
+	RepoFetcher  RepoFetcher
 	Mode         search.GlobalSearchMode
 	SearcherArgs search.SearcherParameters
 }
 
 func (s *StructuralSearch) Run(ctx context.Context, stream streaming.Sender) error {
-	return runStructuralSearch(ctx, &s.SearcherArgs, NewRepoFetcher(stream, &s.Args), stream)
+	return runStructuralSearch(ctx, &s.SearcherArgs, &s.RepoFetcher, stream)
 }
