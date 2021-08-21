@@ -67,6 +67,30 @@ func (a *Aggregator) Error(err error) {
 	a.mu.Unlock()
 }
 
+func jobName(j streaming.Job) string {
+	switch j.(type) {
+	case *unindexed.StructuralSearch:
+		return "Structural"
+	default:
+		return "Generic"
+	}
+}
+
+func (a *Aggregator) DoSearch(ctx context.Context, j streaming.Job, mode search.GlobalSearchMode) (err error) {
+	name := jobName(j)
+	tr, ctx := trace.New(ctx, "DoSearch", name)
+	tr.LogFields(trace.Stringer("global_search_mode", mode))
+	defer func() {
+		a.Error(err)
+		tr.SetErrorIfNotContext(err)
+		tr.Finish()
+	}()
+
+	err = j.Run(ctx, a)
+	return errors.Wrap(err, jobName(j)+"search failed")
+
+}
+
 func (a *Aggregator) DoRepoSearch(ctx context.Context, args *search.TextParameters, limit int32) (err error) {
 	tr, ctx := trace.New(ctx, "doRepoSearch", "")
 	defer func() {
@@ -89,19 +113,6 @@ func (a *Aggregator) DoSymbolSearch(ctx context.Context, args *search.TextParame
 
 	err = symbol.Search(ctx, args, limit, a)
 	return errors.Wrap(err, "symbol search failed")
-}
-
-func (a *Aggregator) DoStructuralSearch(ctx context.Context, args *search.SearcherParameters, mode search.GlobalSearchMode, repoFetcher *unindexed.RepoFetcher) (err error) {
-	tr, ctx := trace.New(ctx, "doStructuralSearch", "")
-	tr.LogFields(trace.Stringer("global_search_mode", mode))
-	defer func() {
-		a.Error(err)
-		tr.SetErrorIfNotContext(err)
-		tr.Finish()
-	}()
-
-	err = unindexed.StructuralSearch(ctx, args, repoFetcher, a)
-	return errors.Wrap(err, "structural search failed")
 }
 
 func (a *Aggregator) DoFilePathSearch(ctx context.Context, args *search.TextParameters) (err error) {

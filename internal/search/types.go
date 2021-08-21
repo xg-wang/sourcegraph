@@ -18,15 +18,6 @@ import (
 	"github.com/sourcegraph/sourcegraph/schema"
 )
 
-type TypeParameters interface {
-	typeParametersValue()
-}
-
-func (CommitParameters) typeParametersValue()  {}
-func (DiffParameters) typeParametersValue()    {}
-func (SymbolsParameters) typeParametersValue() {}
-func (TextParameters) typeParametersValue()    {}
-
 type CommitParameters struct {
 	RepoRevs           *RepositoryRevisions
 	PatternInfo        *CommitPatternInfo

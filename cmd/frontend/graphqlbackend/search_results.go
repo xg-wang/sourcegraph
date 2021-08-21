@@ -21,6 +21,7 @@ import (
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/sourcegraph/sourcegraph/internal/search/unindexed"
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/envvar"
 	searchlogs "github.com/sourcegraph/sourcegraph/cmd/frontend/internal/search/logs"
@@ -41,7 +42,6 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/search/run"
 	"github.com/sourcegraph/sourcegraph/internal/search/searchcontexts"
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
-	"github.com/sourcegraph/sourcegraph/internal/search/unindexed"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 	"github.com/sourcegraph/sourcegraph/internal/trace/ot"
 	"github.com/sourcegraph/sourcegraph/internal/types"
@@ -560,17 +560,16 @@ func withMode(args search.TextParameters, st query.SearchType, versionContext *s
 	return args
 }
 
-func (r *searchResolver) toTextParameters(q query.Q) (*search.TextParameters, error) {
-	forceResultTypes := result.TypeEmpty
-	if r.PatternType == query.SearchTypeStructural {
-		forceResultTypes = result.TypeFile
-	}
-
+func (r *searchResolver) toSearchInputs(q query.Q) (*search.TextParameters, []streaming.Job, error) {
 	b, err := query.ToBasicQuery(q)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
 	p := search.ToTextPatternInfo(b, r.protocol(), query.Identity)
+
+	var jobs []streaming.Job
+	forceResultTypes := result.TypeEmpty
 
 	if r.PatternType == query.SearchTypeStructural {
 		if p.Pattern == "" {
@@ -579,8 +578,6 @@ func (r *searchResolver) toTextParameters(q query.Q) (*search.TextParameters, er
 			r.PatternType = query.SearchTypeLiteral
 			p.IsStructuralPat = false
 			forceResultTypes = result.Types(0)
-		} else {
-			forceResultTypes = result.TypeStructural
 		}
 	}
 
@@ -597,19 +594,31 @@ func (r *searchResolver) toTextParameters(q query.Q) (*search.TextParameters, er
 	}
 	args = withResultTypes(args, forceResultTypes)
 	args = withMode(args, r.PatternType, r.VersionContext)
-	return &args, nil
+
+	if r.PatternType == query.SearchTypeStructural && p.Pattern != "" {
+		jobs = append(jobs, &unindexed.StructuralSearch{
+			Args: args,
+			Mode: args.Mode,
+			SearcherArgs: search.SearcherParameters{
+				SearcherURLs:    args.SearcherURLs,
+				PatternInfo:     args.PatternInfo,
+				UseFullDeadline: args.UseFullDeadline,
+			},
+		})
+	}
+	return &args, jobs, nil
 }
 
 // evaluateLeaf performs a single search operation and corresponds to the
 // evaluation of leaf expression in a query.
-func (r *searchResolver) evaluateLeaf(ctx context.Context, args *search.TextParameters) (_ *SearchResults, err error) {
+func (r *searchResolver) evaluateLeaf(ctx context.Context, args *search.TextParameters, jobs []streaming.Job) (_ *SearchResults, err error) {
 	tr, ctx := trace.New(ctx, "evaluateLeaf", "")
 	defer func() {
 		tr.SetError(err)
 		tr.Finish()
 	}()
 
-	return r.resultsWithTimeoutSuggestion(ctx, args)
+	return r.resultsWithTimeoutSuggestion(ctx, args, jobs)
 }
 
 // union returns the union of two sets of search results and merges common search data.
@@ -804,19 +813,19 @@ func (r *searchResolver) evaluatePatternExpression(ctx context.Context, q query.
 			return r.evaluateOr(ctx, q)
 		case query.Concat:
 			r.invalidateCache()
-			args, err := r.toTextParameters(q.ToParseTree())
+			args, jobs, err := r.toSearchInputs(q.ToParseTree())
 			if err != nil {
 				return &SearchResults{}, err
 			}
-			return r.evaluateLeaf(ctx, args)
+			return r.evaluateLeaf(ctx, args, jobs)
 		}
 	case query.Pattern:
 		r.invalidateCache()
-		args, err := r.toTextParameters(q.ToParseTree())
+		args, jobs, err := r.toSearchInputs(q.ToParseTree())
 		if err != nil {
 			return &SearchResults{}, err
 		}
-		return r.evaluateLeaf(ctx, args)
+		return r.evaluateLeaf(ctx, args, jobs)
 	case query.Parameter:
 		// evaluatePatternExpression does not process Parameter nodes.
 		return &SearchResults{}, nil
@@ -829,11 +838,11 @@ func (r *searchResolver) evaluatePatternExpression(ctx context.Context, q query.
 func (r *searchResolver) evaluate(ctx context.Context, q query.Basic) (*SearchResults, error) {
 	if q.Pattern == nil {
 		r.invalidateCache()
-		args, err := r.toTextParameters(query.ToNodes(q.Parameters))
+		args, jobs, err := r.toSearchInputs(query.ToNodes(q.Parameters))
 		if err != nil {
 			return &SearchResults{}, err
 		}
-		return r.evaluateLeaf(ctx, args)
+		return r.evaluateLeaf(ctx, args, jobs)
 	}
 	return r.evaluatePatternExpression(ctx, q)
 }
@@ -1116,9 +1125,9 @@ func searchResultsToFileNodes(matches []result.Match) ([]query.Node, error) {
 // resultsWithTimeoutSuggestion calls doResults, and in case of deadline
 // exceeded returns a search alert with a did-you-mean link for the same
 // query with a longer timeout.
-func (r *searchResolver) resultsWithTimeoutSuggestion(ctx context.Context, args *search.TextParameters) (*SearchResults, error) {
+func (r *searchResolver) resultsWithTimeoutSuggestion(ctx context.Context, args *search.TextParameters, jobs []streaming.Job) (*SearchResults, error) {
 	start := time.Now()
-	rr, err := r.doResults(ctx, args)
+	rr, err := r.doResults(ctx, args, jobs)
 
 	// If we encountered a context timeout, it indicates one of the many result
 	// type searchers (file, diff, symbol, etc) completely timed out and could not
@@ -1299,11 +1308,11 @@ func (r *searchResolver) Stats(ctx context.Context) (stats *searchResultsStats, 
 	for {
 		// Query search results.
 		var err error
-		args, err := r.toTextParameters(r.Query)
+		args, jobs, err := r.toSearchInputs(r.Query)
 		if err != nil {
 			return nil, err
 		}
-		results, err := r.doResults(ctx, args)
+		results, err := r.doResults(ctx, args, jobs)
 		if err != nil {
 			return nil, err // do not cache errors.
 		}
@@ -1387,7 +1396,7 @@ func withResultTypes(args search.TextParameters, forceTypes result.Types) search
 // regardless of what `type:` is specified in the query string.
 //
 // Partial results AND an error may be returned.
-func (r *searchResolver) doResults(ctx context.Context, args *search.TextParameters) (res *SearchResults, err error) {
+func (r *searchResolver) doResults(ctx context.Context, args *search.TextParameters, jobs []streaming.Job) (res *SearchResults, err error) {
 	tr, ctx := trace.New(ctx, "doResults", r.rawQuery())
 	defer func() {
 		tr.SetError(err)
@@ -1566,21 +1575,6 @@ func (r *searchResolver) doResults(ctx context.Context, args *search.TextParamet
 		}
 	}
 
-	if args.ResultTypes.Has(result.TypeStructural) {
-		wg := waitGroup(true)
-		wg.Add(1)
-		goroutine.Go(func() {
-			defer wg.Done()
-			repoFetcher := unindexed.NewRepoFetcher(agg, args)
-			searcherArgs := &search.SearcherParameters{
-				SearcherURLs:    args.SearcherURLs,
-				PatternInfo:     args.PatternInfo,
-				UseFullDeadline: args.UseFullDeadline,
-			}
-			_ = agg.DoStructuralSearch(ctx, searcherArgs, args.Mode, repoFetcher)
-		})
-	}
-
 	if args.ResultTypes.Has(result.TypeDiff) {
 		wg := waitGroup(args.ResultTypes.Without(result.TypeDiff) == 0)
 		wg.Add(1)
@@ -1598,6 +1592,15 @@ func (r *searchResolver) doResults(ctx context.Context, args *search.TextParamet
 			_ = agg.DoCommitSearch(ctx, args)
 		})
 
+	}
+
+	for _, j := range jobs {
+		wg := waitGroup(true)
+		wg.Add(1)
+		goroutine.Go(func() {
+			defer wg.Done()
+			_ = agg.DoSearch(ctx, j, args.Mode)
+		})
 	}
 
 	hasStartedAllBackends = true
