@@ -1387,7 +1387,18 @@ func withResultTypes(args search.TextParameters, forceTypes result.Types) search
 // regardless of what `type:` is specified in the query string.
 //
 // Partial results AND an error may be returned.
-func (r *searchResolver) doResults(ctx context.Context, args *search.TextParameters) (res *SearchResults, err error) {
+func (r *searchResolver) doResults(ctx context.Context, jobs []search.Job) (*SearchResults, error) {
+	for _, j := range jobs {
+		switch j.(type) {
+		case *search.GenericSearch:
+			doGenericResults(ctx, j.args)
+		case *unindexed.StructuralSearch:
+			j.Run(ctx)
+		}
+	}
+}
+
+func (r *searchResolver) doGenericResults(ctx context.Context, args *search.TextParameters) (res *SearchResults, err error) {
 	tr, ctx := trace.New(ctx, "doResults", r.rawQuery())
 	defer func() {
 		tr.SetError(err)

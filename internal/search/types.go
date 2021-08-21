@@ -19,13 +19,19 @@ import (
 	"github.com/sourcegraph/sourcegraph/schema"
 )
 
-// Runner is an interface shared by all search backends. Calling Run on search
+// Job is an interface shared by all search backends. Calling Run on search job
 // objects runs the search.
-type Runner interface {
+type Job interface {
 	Run(context.Context) error
 }
 
-//struct Generic struct {}
+// Generic represents a generic search with generic inputs that we haven't yet
+// resolved to a specific search (like commit search) with specific inputs (like
+// CommitParameters). Semantically, running a generic search means it could run
+// *any* search based on what the logic decides from generic inputs.
+type Generic struct {
+	args *TextParameters
+}
 
 type CommitParameters struct {
 	RepoRevs           *RepositoryRevisions
