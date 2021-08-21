@@ -294,8 +294,8 @@ func MissingRepoRevStatus(stream streaming.Sender) OnMissingRepoRevs {
 	}
 }
 
-func NewIndexedSubsetSearchRequest(ctx context.Context, args *search.ZoektParameters, index query.YesNoOnly, typ search.IndexedRequestType, repos []*search.RepositoryRevisions, q query.Q, onMissing OnMissingRepoRevs) (_ *IndexedSubsetSearchRequest, err error) {
-	tr, ctx := trace.New(ctx, "NewIndexedSubsetSearchRequest", string(typ))
+func NewIndexedSubsetSearchRequest(ctx context.Context, args *search.ZoektParameters, index query.YesNoOnly, repos []*search.RepositoryRevisions, q query.Q, onMissing OnMissingRepoRevs) (_ *IndexedSubsetSearchRequest, err error) {
+	tr, ctx := trace.New(ctx, "NewIndexedSubsetSearchRequest", string(args.Typ))
 	defer func() {
 		tr.SetError(err)
 		tr.Finish()
@@ -332,7 +332,7 @@ func NewIndexedSubsetSearchRequest(ctx context.Context, args *search.ZoektParame
 
 	// Only include indexes with symbol information if a symbol request.
 	var filter func(repo *zoekt.Repository) bool
-	if typ == search.SymbolRequest {
+	if args.Typ == search.SymbolRequest {
 		filter = func(repo *zoekt.Repository) bool {
 			return repo.HasSymbols
 		}

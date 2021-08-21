@@ -142,8 +142,6 @@ type ZoektParameters struct {
 	Typ            IndexedRequestType
 	FileMatchLimit int32
 	Select         filter.SelectPath
-
-	Zoekt *backend.Zoekt
 }
 
 // SearcherParameters the inputs for a search fulfilled by the Searcher service
