@@ -2,7 +2,8 @@ FROM redis:5-alpine@sha256:fea243676a4d2d67f5990ddcbd4a56db9423b7f25e55758491e39
 
 RUN mkdir -p /redis-data && chown -R redis:redis /redis-data
 # hadolint ignore=DL3018
-RUN apk --no-cache add tini apk-tools=2.12.7-r0 libssl1.1=1.1.1l-r0
+RUN apk update --no-cache && apk upgrade --no-cache && \
+    apk --no-cache add tini
 
 USER redis
 COPY redis.conf /etc/redis/redis.conf

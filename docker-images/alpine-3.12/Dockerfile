@@ -22,13 +22,7 @@ RUN addgroup -g 101 -S sourcegraph && adduser -u 100 -S -G sourcegraph -h /home/
 # other Docker containers.
 # See https://github.com/sourcegraph/deploy-sourcegraph-docker/issues/1
 # hadolint ignore=DL3018
-RUN apk add --no-cache bind-tools
-
 # Install other packages that are desirable in ALL Sourcegraph Docker images.
 # hadolint ignore=DL3018
-RUN apk add --no-cache ca-certificates mailcap tini curl
-
-# Manually upgrade upgrade libxml2 packages due CVE's
-# See https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-3517 and https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-3518
-# hadolint ignore=DL3018
-RUN apk add --upgrade --no-cache libxml2=2.9.12-r0  apk-tools=2.10.8-r0
+RUN apk update --no-cache && apk upgrade --no-cache && \
+    apk add --no-cache ca-certificates mailcap tini curl bind-tools

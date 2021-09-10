@@ -6,7 +6,8 @@ FROM jaegertracing/jaeger-agent:${JAEGER_VERSION} as base
 FROM sourcegraph/alpine-3.12:106643_2021-08-30_7f4b12a@sha256:5176711adb03e08bed6f231255aa408f1e1dc67429346e6d5a6811e352e06b88
 USER root
 # hadolint ignore=DL3018
-RUN apk --no-cache add bash curl apk-tools=2.10.8-r0
+RUN apk update --no-cache && apk upgrade --no-cache && \
+   apk --no-cache add bash curl
 
 COPY --from=base /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=base /go/bin/agent-linux /go/bin/agent-linux

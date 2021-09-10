@@ -37,7 +37,7 @@ ADD entry.sh /
 
 USER root
 
-RUN apk add --upgrade --no-cache apk-tools=2.10.8-r0 krb5-libs=1.18.4-r0 libssl1.1=1.1.1l-r0 openssl=1.1.1l-r0
+RUN apk update --no-cache && apk upgrade --no-cache
 
 EXPOSE 3370
 USER grafana
