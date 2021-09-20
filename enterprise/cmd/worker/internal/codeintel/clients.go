@@ -7,6 +7,7 @@ import (
 
 	"github.com/sourcegraph/sourcegraph/cmd/worker/shared"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/gitserver"
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/repoupdater"
 	"github.com/sourcegraph/sourcegraph/internal/observation"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 )
@@ -34,4 +35,19 @@ var initGitserverClient = shared.NewMemoizedConstructor(func() (interface{}, err
 	}
 
 	return gitserver.New(dbStore, observationContext), nil
+})
+
+func InitRepoUpdaterClient() *repoupdater.Client {
+	client, _ := initRepoUpdaterClient.Init()
+	return client.(*repoupdater.Client)
+}
+
+var initRepoUpdaterClient = shared.NewMemoizedConstructor(func() (interface{}, error) {
+	observationContext := &observation.Context{
+		Logger:     log15.Root(),
+		Tracer:     &trace.Tracer{Tracer: opentracing.GlobalTracer()},
+		Registerer: prometheus.DefaultRegisterer,
+	}
+
+	return repoupdater.New(observationContext), nil
 })
