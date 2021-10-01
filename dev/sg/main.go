@@ -51,6 +51,7 @@ var (
 			migrationCommand,
 			rfcCommand,
 			funkLogoCommand,
+			setupCommand,
 		},
 	}
 )
