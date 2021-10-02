@@ -183,27 +183,16 @@ func fallbackUnindexed(repos []*search.RepositoryRevisions, limit int, onMissing
 	}
 }
 
-func NewIndexedSearchRequest(ctx context.Context, args *search.TextParameters, typ search.IndexedRequestType, onMissing OnMissingRepoRevs) (IndexedSearchRequest, error) {
-	// If Zoekt is disabled just fallback to Unindexed.
-	if args.Zoekt == nil {
-		if args.PatternInfo.Index == query.Only {
-			return nil, errors.Errorf("invalid index:%q (indexed search is not enabled)", args.PatternInfo.Index)
-		}
-		return fallbackIndexUnavailable(args.Repos, maxUnindexedRepoRevSearchesPerQuery, onMissing), nil
-	}
-	// Fallback to Unindexed if the query contains valid ref-globs.
-	if query.ContainsRefGlobs(args.Query) {
-		return fallbackUnindexed(args.Repos, maxUnindexedRepoRevSearchesPerQuery, onMissing), nil
-	}
-	// Fallback to Unindexed if index:no
-	if args.PatternInfo.Index == query.No {
-		return fallbackUnindexed(args.Repos, maxUnindexedRepoRevSearchesPerQuery, onMissing), nil
-	}
+type SearchRequest struct {
+	ZoektArgs         ZoektParameters
+	RepoOptions       RepoOptions
+	UserPrivateRepos  []types.RepoName
+	OriginalQuery     query.Q
+	Index             query.YesNoOnly
+	OnMissingRepoRevs OnMissingRepoRevs
+}
 
-	q, err := search.QueryToZoektQuery(args.PatternInfo, typ == search.SymbolRequest)
-	if err != nil {
-		return nil, err
-	}
+func NewIndexedSearchRequest(ctx context.Context, args *search.TextParameters, typ search.IndexedRequestType, onMissing OnMissingRepoRevs) (IndexedSearchRequest, error) {
 	zoektArgs := &search.ZoektParameters{
 		Query:          q,
 		Typ:            typ,
