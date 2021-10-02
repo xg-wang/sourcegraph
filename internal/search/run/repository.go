@@ -99,6 +99,9 @@ func SearchRepositories(ctx context.Context, args *search.TextParameters, limit 
 		for matched := range results {
 			repos = append(repos, matched...)
 		}
+
+		// HERE -> factor out newindexed search request so we don't pass args.
+
 		repos, err = reposToAdd(ctx, args, repos)
 		if err != nil {
 			return err
