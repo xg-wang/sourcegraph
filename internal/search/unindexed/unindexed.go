@@ -12,6 +12,7 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 
 	otlog "github.com/opentracing/opentracing-go/log"
+	zoektutil "github.com/sourcegraph/sourcegraph/internal/search/zoekt"
 
 	"github.com/inconshreveable/log15"
 
@@ -24,7 +25,6 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/search/repos"
 	"github.com/sourcegraph/sourcegraph/internal/search/result"
 	"github.com/sourcegraph/sourcegraph/internal/search/searcher"
-	zoektutil "github.com/sourcegraph/sourcegraph/internal/search/zoekt"
 	"github.com/sourcegraph/sourcegraph/internal/types"
 	"github.com/sourcegraph/sourcegraph/internal/vcs/git"
 )
@@ -32,55 +32,32 @@ import (
 // A global limiter on number of concurrent searcher searches.
 var textSearchLimiter = mutablelimiter.New(32)
 
-var MockSearchFilesInRepos func(args *search.TextParameters) ([]result.Match, *streaming.Stats, error)
+var MockSearchFilesInRepos func(zoektArgs zoektutil.IndexedSearchRequest, searcherArgs *search.SearcherParameters) ([]result.Match, *streaming.Stats, error)
 
 // SearchFilesInRepos searches a set of repos for a pattern.
-func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream streaming.Sender) (err error) {
+func SearchFilesInRepos(ctx context.Context, zoektArgs zoektutil.IndexedSearchRequest, searcherArgs *search.SearcherParameters, searcherOnly bool, stream streaming.Sender) (err error) {
+	// FIXME reintroduce mock search files in repos
 	if MockSearchFilesInRepos != nil {
-		matches, mockStats, err := MockSearchFilesInRepos(args)
+		matches, mockStats, err := MockSearchFilesInRepos(zoektArgs, searcherArgs)
 		stream.Send(streaming.SearchEvent{
 			Results: matches,
 			Stats:   mockStats.Deref(),
 		})
 		return err
 	}
-
-	ctx, stream, cleanup := streaming.WithLimit(ctx, stream, int(args.PatternInfo.FileMatchLimit))
-	defer cleanup()
-
-	tr, ctx := trace.New(ctx, "searchFilesInRepos", fmt.Sprintf("query: %s", args.PatternInfo.Pattern))
-	defer func() {
-		tr.SetErrorIfNotContext(err)
-		tr.Finish()
-	}()
-	tr.LogFields(
-		trace.Stringer("query", args.Query),
-		trace.Stringer("info", args.PatternInfo),
-		trace.Stringer("global_search_mode", args.Mode),
-	)
-
-	request, err := zoektutil.NewIndexedSearchRequest(ctx, args, search.TextRequest, zoektutil.MissingRepoRevStatus(stream))
-	if err != nil {
-		return err
-	}
-
+	// FIXME reintroduce trace
 	g, ctx := errgroup.WithContext(ctx)
 
-	if args.Mode != search.SearcherOnly {
+	if !searcherOnly {
 		// Run literal and regexp searches on indexed repositories.
 		g.Go(func() error {
-			return request.Search(ctx, stream)
+			return zoektArgs.Search(ctx, stream)
 		})
 	}
 
 	// Concurrently run searcher for all unindexed repos regardless whether text or regexp.
 	g.Go(func() error {
-		searcherArgs := &search.SearcherParameters{
-			SearcherURLs:    args.SearcherURLs,
-			PatternInfo:     args.PatternInfo,
-			UseFullDeadline: args.UseFullDeadline,
-		}
-		return callSearcherOverRepos(ctx, searcherArgs, stream, request.UnindexedRepos(), false)
+		return callSearcherOverRepos(ctx, searcherArgs, stream, zoektArgs.UnindexedRepos(), false)
 	})
 
 	return g.Wait()
@@ -88,9 +65,9 @@ func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 
 // SearchFilesInRepoBatch is a convenience function around searchFilesInRepos
 // which collects the results from the stream.
-func SearchFilesInReposBatch(ctx context.Context, args *search.TextParameters) ([]*result.FileMatch, streaming.Stats, error) {
+func SearchFilesInReposBatch(ctx context.Context, zoektArgs zoektutil.IndexedSearchRequest, searcherArgs *search.SearcherParameters, searcherOnly bool) ([]*result.FileMatch, streaming.Stats, error) {
 	matches, stats, err := streaming.CollectStream(func(stream streaming.Sender) error {
-		return SearchFilesInRepos(ctx, args, stream)
+		return SearchFilesInRepos(ctx, zoektArgs, searcherArgs, searcherOnly, stream)
 	})
 
 	fms, fmErr := matchesToFileMatches(matches)
