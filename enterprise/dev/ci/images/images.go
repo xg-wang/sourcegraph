@@ -84,8 +84,7 @@ var DeploySourcegraphDockerImages = []string{
 // SourcegraphDockerImages denotes all Docker images that are published by Sourcegraph.
 //
 // The `addDockerImages` pipeline step determines what images are built and published.
-var SourcegraphDockerImages = append(DeploySourcegraphDockerImages,
-	"server")
+var SourcegraphDockerImages = append([]string{"server"}, DeploySourcegraphDockerImages...)
 
 // CandidateImageTag provides the tag for a candidate image built for this Buildkite run.
 //
