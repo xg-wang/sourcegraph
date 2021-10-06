@@ -1451,7 +1451,7 @@ func (s *Server) handleRepoArchive(w http.ResponseWriter, r *http.Request) {
 	dir := s.dir(api.RepoName(repo))
 	if !repoCloned(dir) {
 		w.WriteHeader(http.StatusNotFound)
-		// return
+		return
 	}
 
 	repoRoot := dir.Root()
