@@ -96,7 +96,7 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 	}
 
 	// Query a single page of location results
-	locations, hasMore, err := r.pageReferences(ctx, "references", "references", adjustedUploads, orderedMonikers, definitionUploadIDs, uploadsByID, &cursor, limit)
+	locations, err := r.pageReferences(ctx, "references", "references", adjustedUploads, orderedMonikers, definitionUploadIDs, uploadsByID, &cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
@@ -113,7 +113,7 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 	traceLog(log.Int("numAdjustedLocations", len(adjustedLocations)))
 
 	nextCursor := ""
-	if hasMore {
+	if cursor.Phase != "done" {
 		nextCursor = encodeCursor(cursor)
 	}
 
@@ -237,24 +237,24 @@ func (r *queryResolver) definitionUploadIDsFromCursor(ctx context.Context, adjus
 // pageReferences returns a slice of the result set denoted by the given cursor. The given cursor will be
 // adjusted to reflect the offsets required to resolve the next page of results. If there are no more pages
 // left in the result set, a false-valued flag is returned.
-func (r *queryResolver) pageReferences(ctx context.Context, ty string, lsifDataTable string, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, definitionUploadIDs []int, uploadsByID map[int]dbstore.Dump, cursor *referencesCursor, limit int) ([]lsifstore.Location, bool, error) {
+func (r *queryResolver) pageReferences(ctx context.Context, ty string, lsifDataTable string, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, definitionUploadIDs []int, uploadsByID map[int]dbstore.Dump, cursor *referencesCursor, limit int) ([]lsifstore.Location, error) {
 	var locations []lsifstore.Location
 
 	// Phase 1: Gather all "local" locations via LSIF graph traversal. We'll continue to request additional
 	// locations until we fill an entire page (the size of which is denoted by the given limit) or there are
 	// no more local results remaining.
 
-	if !cursor.RemotePhase {
+	if cursor.Phase == "local" {
 		for len(locations) < limit {
 			localLocations, hasMore, err := r.pageLocalReferences(ctx, ty, adjustedUploads, cursor, limit-len(locations))
 			if err != nil {
-				return nil, false, err
+				return nil, err
 			}
 			locations = append(locations, localLocations...)
 
 			if !hasMore {
 				// No more local results, move on to phase 2
-				cursor.RemotePhase = true
+				cursor.Phase = "remote"
 				break
 			}
 		}
@@ -264,21 +264,22 @@ func (r *queryResolver) pageReferences(ctx context.Context, ty string, lsifDataT
 	// results. We'll continue to request additional locations until we fill an entire page or there are no
 	// more local results remaining, just as we did above.
 
-	if cursor.RemotePhase {
+	if cursor.Phase == "remote" {
 		for len(locations) < limit {
 			remoteLocations, hasMore, err := r.pageRemoteReferences(ctx, lsifDataTable, adjustedUploads, orderedMonikers, definitionUploadIDs, uploadsByID, cursor, limit-len(locations))
 			if err != nil {
-				return nil, false, err
+				return nil, err
 			}
 			locations = append(locations, remoteLocations...)
 
 			if !hasMore {
-				return locations, false, nil
+				cursor.Phase = "done"
+				return locations, nil
 			}
 		}
 	}
 
-	return locations, true, nil
+	return locations, nil
 }
 
 // pageLocalReferences returns a slice of the (local) result set denoted by the given cursor fulfilled by
