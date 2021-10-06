@@ -288,14 +288,10 @@ func (r *queryResolver) pageReferences(ctx context.Context, ty string, lsifDataT
 // returned.
 func (r *queryResolver) pageLocalReferences(ctx context.Context, ty string, adjustedUploads []adjustedUpload, cursor *referencesCursor, limit int) ([]lsifstore.Location, bool, error) {
 	var allLocations []lsifstore.Location
-	for i := range adjustedUploads {
+	for _, adjustedUpload := range adjustedUploads[cursor.LocalBatchOffset:] {
 		if len(allLocations) >= limit {
 			// We've filled the page
 			break
-		}
-		if i < cursor.LocalBatchOffset {
-			// Skip indexes we've searched completely
-			continue
 		}
 
 		fn := r.lsifStore.References
@@ -304,10 +300,10 @@ func (r *queryResolver) pageLocalReferences(ctx context.Context, ty string, adju
 		}
 		locations, totalCount, err := fn(
 			ctx,
-			adjustedUploads[i].Upload.ID,
-			adjustedUploads[i].AdjustedPathInBundle,
-			adjustedUploads[i].AdjustedPosition.Line,
-			adjustedUploads[i].AdjustedPosition.Character,
+			adjustedUpload.Upload.ID,
+			adjustedUpload.AdjustedPathInBundle,
+			adjustedUpload.AdjustedPosition.Line,
+			adjustedUpload.AdjustedPosition.Character,
 			limit-len(allLocations),
 			cursor.LocalOffset,
 		)
