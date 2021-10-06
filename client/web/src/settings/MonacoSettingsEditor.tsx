@@ -1,6 +1,7 @@
 import * as jsonc from '@sqs/jsonc-parser'
 import classNames from 'classnames'
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
+import 'monaco-yaml'
 import * as React from 'react'
 import { Subject, Subscription } from 'rxjs'
 import { distinctUntilChanged, distinctUntilKeyChanged, map, startWith } from 'rxjs/operators'
@@ -147,7 +148,7 @@ export class MonacoSettingsEditor extends React.PureComponent<Props, State> {
 
         this.disposables.push(registerRedactedHover(monaco))
 
-        setDiagnosticsOptions(monaco, this.props)
+        setDiagnosticsOptions(monaco, this.props.jsonSchema)
 
         // Only listen to 1 event each to avoid receiving events from other Monaco editors on the
         // same page (if there are multiple).
@@ -260,7 +261,22 @@ export class MonacoSettingsEditor extends React.PureComponent<Props, State> {
     }
 }
 
-function setDiagnosticsOptions(editor: typeof monaco, jsonSchema: any): void {
+function setDiagnosticsOptions(editor: typeof monaco, jsonSchema: JSONSchema | undefined): void {
+    editor.languages.yaml.yamlDefaults.setDiagnosticsOptions({
+        validate: true,
+        isKubernetes: false,
+        format: true,
+        completion: true,
+        hover: true,
+        schemas: [
+            {
+                uri: 'file:///root',
+                schema: jsonSchema,
+                fileMatch: ['*'],
+            },
+        ],
+    })
+
     editor.languages.json.jsonDefaults.setDiagnosticsOptions({
         validate: true,
         allowComments: true,

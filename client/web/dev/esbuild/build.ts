@@ -97,6 +97,7 @@ export const buildMonaco = async (): Promise<void> => {
         entryPoints: {
             'scripts/editor.worker.bundle': 'monaco-editor/esm/vs/editor/editor.worker.js',
             'scripts/json.worker.bundle': 'monaco-editor/esm/vs/language/json/json.worker.js',
+            'scripts/yaml.worker.bundle': 'monaco-yaml/lib/esm/yaml.worker.js',
         },
         format: 'iife',
         target: 'es2021',

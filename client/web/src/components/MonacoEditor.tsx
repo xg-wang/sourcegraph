@@ -300,7 +300,13 @@ if (!window.MonacoEnvironment) {
             if (label === 'json') {
                 return window.context.assetsRoot + '/scripts/json.worker.bundle.js'
             }
-            return window.context.assetsRoot + '/scripts/editor.worker.bundle.js'
+            if (label === 'yaml') {
+                return window.context.assetsRoot + '/scripts/yaml.worker.bundle.js'
+            }
+            if (label === 'editorWorkerService') {
+                return window.context.assetsRoot + '/scripts/editor.worker.bundle.js'
+            }
+            throw new Error('Invalid worker type requested for monaco')
         },
     }
 }

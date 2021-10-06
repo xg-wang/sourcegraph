@@ -55,6 +55,9 @@ window.MonacoEnvironment = {
         if (label === 'json') {
             return '/json.worker.bundle.js'
         }
+        if (label === 'yaml') {
+            return '/yaml.worker.bundle.js'
+        }
 
         return '/editor.worker.bundle.js'
     },

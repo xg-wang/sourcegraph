@@ -119,6 +119,7 @@ const config = {
     app: isEnterpriseBuild ? path.join(enterpriseDirectory, 'main.tsx') : path.join(__dirname, 'src', 'main.tsx'),
     'editor.worker': 'monaco-editor/esm/vs/editor/editor.worker.js',
     'json.worker': 'monaco-editor/esm/vs/language/json/json.worker',
+    'yaml.worker': 'monaco-yaml/lib/esm/yaml.worker',
   },
   output: {
     path: path.join(rootPath, 'ui', 'assets'),
