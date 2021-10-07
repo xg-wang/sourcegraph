@@ -35,18 +35,13 @@ var textSearchLimiter = mutablelimiter.New(32)
 var MockSearchFilesInRepos func() ([]result.Match, *streaming.Stats, error)
 
 // SearchFilesInRepos searches a set of repos for a pattern.
-func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, searcherArgs *search.SearcherParameters, notSearcherOnly bool, stream streaming.Sender) (err error) {
+func SearchFilesInRepos(ctx context.Context, zoektArgs zoektutil.IndexedSearchRequest, searcherArgs *search.SearcherParameters, notSearcherOnly bool, stream streaming.Sender) (err error) {
 	if MockSearchFilesInRepos != nil {
 		matches, mockStats, err := MockSearchFilesInRepos()
 		stream.Send(streaming.SearchEvent{
 			Results: matches,
 			Stats:   mockStats.Deref(),
 		})
-		return err
-	}
-
-	zoektArgs, err := zoektutil.NewIndexedSearchRequest(ctx, args, search.TextRequest, zoektutil.MissingRepoRevStatus(stream))
-	if err != nil {
 		return err
 	}
 
@@ -71,16 +66,16 @@ func SearchFilesInRepos(ctx context.Context, args *search.TextParameters, search
 // which collects the results from the stream.
 func SearchFilesInReposBatch(ctx context.Context, args *search.TextParameters) ([]*result.FileMatch, streaming.Stats, error) {
 	matches, stats, err := streaming.CollectStream(func(stream streaming.Sender) error {
-		//		zoektArgs, err := zoektutil.NewIndexedSearchRequest(ctx, args, search.TextRequest, func([]*search.RepositoryRevisions) {})
-		//		if err != nil {
-		//			return err
-		//		}
+		zoektArgs, err := zoektutil.NewIndexedSearchRequest(ctx, args, search.TextRequest, func([]*search.RepositoryRevisions) {})
+		if err != nil {
+			return err
+		}
 		searcherArgs := &search.SearcherParameters{
 			SearcherURLs:    args.SearcherURLs,
 			PatternInfo:     args.PatternInfo,
 			UseFullDeadline: args.UseFullDeadline,
 		}
-		return SearchFilesInRepos(ctx, args, searcherArgs, args.Mode != search.SearcherOnly, stream)
+		return SearchFilesInRepos(ctx, zoektArgs, searcherArgs, args.Mode != search.SearcherOnly, stream)
 	})
 
 	fms, fmErr := matchesToFileMatches(matches)

@@ -15,6 +15,7 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
 	"github.com/sourcegraph/sourcegraph/internal/search/symbol"
 	"github.com/sourcegraph/sourcegraph/internal/search/unindexed"
+	zoektutil "github.com/sourcegraph/sourcegraph/internal/search/zoekt"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 )
 
@@ -118,10 +119,10 @@ func (a *Aggregator) DoSymbolSearch(ctx context.Context, args *search.TextParame
 }
 
 func (a *Aggregator) DoFilePathSearch(ctx context.Context, args *search.TextParameters) (err error) {
-	//	zoektArgs, err := zoektutil.NewIndexedSearchRequest(ctx, args, search.TextRequest, zoektutil.MissingRepoRevStatus(a))
-	//	if err != nil {
-	//		return err
-	//	}
+	zoektArgs, err := zoektutil.NewIndexedSearchRequest(ctx, args, search.TextRequest, zoektutil.MissingRepoRevStatus(a))
+	if err != nil {
+		return err
+	}
 
 	searcherArgs := &search.SearcherParameters{
 		SearcherURLs:    args.SearcherURLs,
@@ -129,7 +130,7 @@ func (a *Aggregator) DoFilePathSearch(ctx context.Context, args *search.TextPara
 		UseFullDeadline: args.UseFullDeadline,
 	}
 
-	return unindexed.SearchFilesInRepos(ctx, args, searcherArgs, args.Mode != search.SearcherOnly, a)
+	return unindexed.SearchFilesInRepos(ctx, zoektArgs, searcherArgs, args.Mode != search.SearcherOnly, a)
 }
 
 func (a *Aggregator) DoDiffSearch(ctx context.Context, tp *search.TextParameters) (err error) {
