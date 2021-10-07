@@ -118,15 +118,18 @@ func (a *Aggregator) DoSymbolSearch(ctx context.Context, args *search.TextParame
 }
 
 func (a *Aggregator) DoFilePathSearch(ctx context.Context, args *search.TextParameters) (err error) {
-	tr, ctx := trace.New(ctx, "doFilePathSearch", "")
-	tr.LogFields(trace.Stringer("global_search_mode", args.Mode))
-	defer func() {
-		a.Error(err)
-		tr.SetErrorIfNotContext(err)
-		tr.Finish()
-	}()
+	//	zoektArgs, err := zoektutil.NewIndexedSearchRequest(ctx, args, search.TextRequest, zoektutil.MissingRepoRevStatus(a))
+	//	if err != nil {
+	//		return err
+	//	}
 
-	return unindexed.SearchFilesInRepos(ctx, args, a)
+	searcherArgs := &search.SearcherParameters{
+		SearcherURLs:    args.SearcherURLs,
+		PatternInfo:     args.PatternInfo,
+		UseFullDeadline: args.UseFullDeadline,
+	}
+
+	return unindexed.SearchFilesInRepos(ctx, args, searcherArgs, args.Mode != search.SearcherOnly, a)
 }
 
 func (a *Aggregator) DoDiffSearch(ctx context.Context, tp *search.TextParameters) (err error) {
