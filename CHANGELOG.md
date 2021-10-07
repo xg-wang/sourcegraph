@@ -35,7 +35,9 @@ All notable changes to Sourcegraph are documented in this file.
 
 ### Removed
 
--
+- The old Campaigns GraphQL APIs have been removed. Please use Batch Changes APIs going forward.
+- The old Campaigns URLs have been removed.
+- The deprecated `campaigns.restrictToAdmins` and `campaigns.enable` config options have been removed.
 
 ## 3.32.0
 
