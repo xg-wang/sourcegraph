@@ -35,15 +35,6 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 	})
 	defer endObservation()
 
-	// Maintain a map from identifers to hydrated upload records from the database. We use
-	// this map as a quick lookup when constructing the resulting location set. Any additional
-	// upload records pulled back from the database while processing this page will be added
-	// to this map.
-	uploadsByID := make(map[int]dbstore.Dump, len(r.uploads))
-	for i := range r.uploads {
-		uploadsByID[r.uploads[i].ID] = r.uploads[i]
-	}
-
 	// Decode cursor given from previous response or create a new one with default values.
 	// We use the cursor state track offsets with the result set and cache initial data that
 	// is used to resolve each page. This cursor will be modified in-place to become the
@@ -60,7 +51,7 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 	// References at the given file:line:character could come from multiple uploads, so we
 	// need to look in all uploads and merge the results.
 
-	adjustedUploads, err := r.adjustedUploadsFromCursor(ctx, line, character, uploadsByID, &cursor)
+	adjustedUploads, err := r.adjustedUploadsFromCursor(ctx, line, character, &cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -82,7 +73,7 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 	// one of the adjusted indexes. This data may already be stashed in the cursor decoded above,
 	// in which case we don't need to hit the database.
 
-	definitionUploadIDs, definitionUploads, err := r.definitionUploadIDsFromCursor(ctx, adjustedUploads, orderedMonikers, &cursor)
+	definitionUploadIDs, err := r.definitionUploadIDsFromCursor(ctx, adjustedUploads, orderedMonikers, &cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -91,15 +82,8 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 		log.String("definitionUploads", intsToString(definitionUploadIDs)),
 	)
 
-	// If we pulled additional records back from the database, add them to the upload map. This
-	// slice will be empty if the definition ids were cached on the cursor.
-
-	for i := range definitionUploads {
-		uploadsByID[definitionUploads[i].ID] = definitionUploads[i]
-	}
-
 	// Query a single page of location results
-	locations, err := r.pageReferences(ctx, "references", "references", adjustedUploads, orderedMonikers, definitionUploadIDs, uploadsByID, &cursor, limit)
+	locations, err := r.pageReferences(ctx, "references", "references", adjustedUploads, orderedMonikers, definitionUploadIDs, &cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
@@ -109,7 +93,7 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 	// locations within the repository the user is browsing so that it appears all references
 	// are occurring at the same commit they are looking at.
 
-	adjustedLocations, err := r.adjustLocations(ctx, uploadsByID, locations)
+	adjustedLocations, err := r.adjustLocations(ctx, locations)
 	if err != nil {
 		return nil, "", err
 	}
@@ -135,11 +119,11 @@ var ErrConcurrentModification = errors.New("result set changed while paginating"
 //
 // An error is returned if the set of visible uploads has changed since the previous request of this
 // result set (specifically if an index becomes invisible). This behavior may change in the future.
-func (r *queryResolver) adjustedUploadsFromCursor(ctx context.Context, line, character int, uploadsByID map[int]dbstore.Dump, cursor *referencesCursor) ([]adjustedUpload, error) {
+func (r *queryResolver) adjustedUploadsFromCursor(ctx context.Context, line, character int, cursor *referencesCursor) ([]adjustedUpload, error) {
 	if cursor.AdjustedUploads != nil {
 		adjustedUploads := make([]adjustedUpload, 0, len(cursor.AdjustedUploads))
 		for _, u := range cursor.AdjustedUploads {
-			upload, ok := uploadsByID[u.DumpID]
+			upload, ok := r.uploadCache[u.DumpID]
 			if !ok {
 				return nil, ErrConcurrentModification
 			}
@@ -199,16 +183,17 @@ func (r *queryResolver) orderedMonikersFromCursor(ctx context.Context, adjustedU
 //
 // The upload records returned from the database, if any, are also returned from this method to help reduce
 // the number of database queries necessary.
-func (r *queryResolver) definitionUploadIDsFromCursor(ctx context.Context, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, cursor *referencesCursor) ([]int, []dbstore.Dump, error) {
+func (r *queryResolver) definitionUploadIDsFromCursor(ctx context.Context, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, cursor *referencesCursor) ([]int, error) {
 	if cursor.DefinitionUploadIDsCached {
-		return cursor.DefinitionUploadIDs, nil, nil
+		return cursor.DefinitionUploadIDs, nil
 	}
 
 	definitionUploads, err := r.definitionUploads(ctx, orderedMonikers)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
+	// Omit the given adjusted uploads
 	definitionUploadIDs := make([]int, 0, len(definitionUploads))
 	for i := range definitionUploads {
 		found := false
@@ -234,13 +219,13 @@ func (r *queryResolver) definitionUploadIDsFromCursor(ctx context.Context, adjus
 
 	cursor.DefinitionUploadIDs = definitionUploadIDs
 	cursor.DefinitionUploadIDsCached = true
-	return definitionUploadIDs, definitionUploads, nil
+	return definitionUploadIDs, nil
 }
 
 // pageReferences returns a slice of the result set denoted by the given cursor. The given cursor will be
 // adjusted to reflect the offsets required to resolve the next page of results. If there are no more pages
 // left in the result set, a false-valued flag is returned.
-func (r *queryResolver) pageReferences(ctx context.Context, ty string, lsifDataTable string, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, definitionUploadIDs []int, uploadsByID map[int]dbstore.Dump, cursor *referencesCursor, limit int) ([]lsifstore.Location, error) {
+func (r *queryResolver) pageReferences(ctx context.Context, ty string, lsifDataTable string, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, definitionUploadIDs []int, cursor *referencesCursor, limit int) ([]lsifstore.Location, error) {
 	var locations []lsifstore.Location
 
 	// Phase 1: Gather all "local" locations via LSIF graph traversal. We'll continue to request additional
@@ -266,7 +251,7 @@ func (r *queryResolver) pageReferences(ctx context.Context, ty string, lsifDataT
 
 	if cursor.Phase == "remote" {
 		for len(locations) < limit {
-			remoteLocations, hasMore, err := r.pageRemoteReferences(ctx, lsifDataTable, adjustedUploads, orderedMonikers, definitionUploadIDs, uploadsByID, cursor, limit-len(locations))
+			remoteLocations, hasMore, err := r.pageRemoteReferences(ctx, lsifDataTable, adjustedUploads, orderedMonikers, definitionUploadIDs, cursor, limit-len(locations))
 			if err != nil {
 				return nil, err
 			}
@@ -333,7 +318,7 @@ const maximumIndexesPerMonikerSearch = 50
 // performing a moniker search over a group of indexes. The given cursor will be adjusted to reflect the
 // offsets required to resolve the next page of results. If there are no more pages left in the result set,
 // a false-valued flag is returned.
-func (r *queryResolver) pageRemoteReferences(ctx context.Context, lsifDataTable string, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, definitionUploadIDs []int, uploadsByID map[int]dbstore.Dump, cursor *referencesCursor, limit int) ([]lsifstore.Location, bool, error) {
+func (r *queryResolver) pageRemoteReferences(ctx context.Context, lsifDataTable string, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, definitionUploadIDs []int, cursor *referencesCursor, limit int) ([]lsifstore.Location, bool, error) {
 	for len(cursor.BatchIDs) == 0 {
 		if cursor.RemoteBatchOffset < 0 {
 			// No more batches
@@ -356,12 +341,9 @@ func (r *queryResolver) pageRemoteReferences(ctx context.Context, lsifDataTable 
 	}
 
 	// Fetch the upload records we don't currently have hydrated and insert them into the map
-	monikerSearchUploads, err := r.uploadsByIDs(ctx, cursor.BatchIDs, uploadsByID)
+	monikerSearchUploads, err := r.uploadsByIDs(ctx, cursor.BatchIDs)
 	if err != nil {
 		return nil, false, err
-	}
-	for i := range monikerSearchUploads {
-		uploadsByID[monikerSearchUploads[i].ID] = monikerSearchUploads[i]
 	}
 
 	// Perform the moniker search
@@ -519,12 +501,12 @@ func testFilter(filter []byte, orderedMonikers []precise.QualifiedMonikerData) (
 // uploadsByIDs returns a slice of uploads with the given identifiers. This method will not return a
 // new upload record for a commit which is unknown to gitserver. The given upload map is used as a
 // caching mechanism - uploads present in the map are not fetched again from the database.
-func (r *queryResolver) uploadsByIDs(ctx context.Context, ids []int, uploadsByIDs map[int]dbstore.Dump) ([]dbstore.Dump, error) {
+func (r *queryResolver) uploadsByIDs(ctx context.Context, ids []int) ([]dbstore.Dump, error) {
 	missingIDs := make([]int, 0, len(ids))
 	existingUploads := make([]store.Dump, 0, len(ids))
 
 	for _, id := range ids {
-		if upload, ok := uploadsByIDs[id]; ok {
+		if upload, ok := r.uploadCache[id]; ok {
 			existingUploads = append(existingUploads, upload)
 		} else {
 			missingIDs = append(missingIDs, id)
@@ -539,6 +521,10 @@ func (r *queryResolver) uploadsByIDs(ctx context.Context, ids []int, uploadsByID
 	newUploads, err := filterUploadsWithCommits(ctx, r.cachedCommitChecker, uploads)
 	if err != nil {
 		return nil, nil
+	}
+
+	for i := range newUploads {
+		r.uploadCache[newUploads[i].ID] = newUploads[i]
 	}
 
 	return append(existingUploads, newUploads...), nil

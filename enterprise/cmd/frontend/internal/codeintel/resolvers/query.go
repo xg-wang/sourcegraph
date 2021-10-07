@@ -76,6 +76,7 @@ type queryResolver struct {
 	commit              string
 	path                string
 	uploads             []store.Dump
+	uploadCache         map[int]store.Dump
 	operations          *operations
 }
 
@@ -107,6 +108,15 @@ func newQueryResolver(
 	uploads []store.Dump,
 	operations *operations,
 ) *queryResolver {
+	// Maintain a map from identifers to hydrated upload records from the database. We use
+	// this map as a quick lookup when constructing the resulting location set. Any additional
+	// upload records pulled back from the database while processing this page will be added
+	// to this map.
+	uploadCache := make(map[int]store.Dump, len(uploads))
+	for i := range uploads {
+		uploadCache[uploads[i].ID] = uploads[i]
+	}
+
 	return &queryResolver{
 		dbStore:             dbStore,
 		lsifStore:           lsifStore,
@@ -117,5 +127,6 @@ func newQueryResolver(
 		commit:              commit,
 		path:                path,
 		uploads:             uploads,
+		uploadCache:         uploadCache,
 	}
 }
