@@ -7,16 +7,13 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"go.uber.org/atomic"
 
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/database"
 	"github.com/sourcegraph/sourcegraph/internal/database/dbtesting"
 	"github.com/sourcegraph/sourcegraph/internal/search"
 	"github.com/sourcegraph/sourcegraph/internal/search/result"
-	"github.com/sourcegraph/sourcegraph/internal/search/run"
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
-	"github.com/sourcegraph/sourcegraph/internal/search/symbol"
 	"github.com/sourcegraph/sourcegraph/internal/search/unindexed"
 	"github.com/sourcegraph/sourcegraph/internal/types"
 	"github.com/sourcegraph/sourcegraph/schema"
@@ -116,67 +113,69 @@ func TestSearchResults(t *testing.T) {
 
 	})
 
-	t.Run("multiple terms regexp", func(t *testing.T) {
-		mockDecodedViewerFinalSettings = &schema.Settings{}
-		defer func() { mockDecodedViewerFinalSettings = nil }()
+	/*
+		t.Run("multiple terms regexp", func(t *testing.T) {
+			mockDecodedViewerFinalSettings = &schema.Settings{}
+			defer func() { mockDecodedViewerFinalSettings = nil }()
 
-		var calledReposListRepoNames bool
-		database.Mocks.Repos.ListRepoNames = func(_ context.Context, op database.ReposListOptions) ([]types.RepoName, error) {
-			calledReposListRepoNames = true
+			var calledReposListRepoNames bool
+			database.Mocks.Repos.ListRepoNames = func(_ context.Context, op database.ReposListOptions) ([]types.RepoName, error) {
+				calledReposListRepoNames = true
 
-			// Validate that the following options are invariant
-			// when calling the DB through Repos.List, no matter how
-			// many times it is called for a single Search(...) operation.
-			assertEqual(t, op.LimitOffset, limitOffset)
+				// Validate that the following options are invariant
+				// when calling the DB through Repos.List, no matter how
+				// many times it is called for a single Search(...) operation.
+				assertEqual(t, op.LimitOffset, limitOffset)
 
-			return []types.RepoName{{ID: 1, Name: "repo"}}, nil
-		}
-		defer func() { database.Mocks = database.MockStores{} }()
-		database.Mocks.Repos.MockGetByName(t, "repo", 1)
-		database.Mocks.Repos.MockGet(t, 1)
-		database.Mocks.Repos.Count = mockCount
-
-		calledSearchRepositories := false
-		run.MockSearchRepositories = func(args *search.TextParameters) ([]result.Match, *streaming.Stats, error) {
-			calledSearchRepositories = true
-			return nil, &streaming.Stats{}, nil
-		}
-		defer func() { run.MockSearchRepositories = nil }()
-
-		calledSearchSymbols := false
-		symbol.MockSearchSymbols = func(ctx context.Context, args *search.TextParameters, limit int) (res []result.Match, common *streaming.Stats, err error) {
-			calledSearchSymbols = true
-			if want := `(foo\d).*?(bar\*)`; args.PatternInfo.Pattern != want {
-				t.Errorf("got %q, want %q", args.PatternInfo.Pattern, want)
+				return []types.RepoName{{ID: 1, Name: "repo"}}, nil
 			}
-			// TODO return mock results here and assert that they are output as results
-			return nil, nil, nil
-		}
-		defer func() { symbol.MockSearchSymbols = nil }()
+			defer func() { database.Mocks = database.MockStores{} }()
+			database.Mocks.Repos.MockGetByName(t, "repo", 1)
+			database.Mocks.Repos.MockGet(t, 1)
+			database.Mocks.Repos.Count = mockCount
 
-		calledSearchFilesInRepos := atomic.NewBool(false)
-		unindexed.MockSearchFilesInRepos = func() ([]result.Match, *streaming.Stats, error) {
-			calledSearchFilesInRepos.Store(true)
-			repo := types.RepoName{ID: 1, Name: "repo"}
-			fm := mkFileMatch(repo, "dir/file", 123)
-			return []result.Match{fm}, &streaming.Stats{}, nil
-		}
-		defer func() { unindexed.MockSearchFilesInRepos = nil }()
+			calledSearchRepositories := false
+			run.MockSearchRepositories = func(args *search.TextParameters) ([]result.Match, *streaming.Stats, error) {
+				calledSearchRepositories = true
+				return nil, &streaming.Stats{}, nil
+			}
+			defer func() { run.MockSearchRepositories = nil }()
 
-		testCallResults(t, `foo\d "bar*"`, "V1", []string{"dir/file:123"})
-		if !calledReposListRepoNames {
-			t.Error("!calledReposListRepoNames")
-		}
-		if !calledSearchRepositories {
-			t.Error("!calledSearchRepositories")
-		}
-		if !calledSearchFilesInRepos.Load() {
-			t.Error("!calledSearchFilesInRepos")
-		}
-		if calledSearchSymbols {
-			t.Error("calledSearchSymbols")
-		}
-	})
+			calledSearchSymbols := false
+			symbol.MockSearchSymbols = func(ctx context.Context, args *search.TextParameters, limit int) (res []result.Match, common *streaming.Stats, err error) {
+				calledSearchSymbols = true
+				if want := `(foo\d).*?(bar\*)`; args.PatternInfo.Pattern != want {
+					t.Errorf("got %q, want %q", args.PatternInfo.Pattern, want)
+				}
+				// TODO return mock results here and assert that they are output as results
+				return nil, nil, nil
+			}
+			defer func() { symbol.MockSearchSymbols = nil }()
+
+			calledSearchFilesInRepos := atomic.NewBool(false)
+			unindexed.MockSearchFilesInRepos = func() ([]result.Match, *streaming.Stats, error) {
+				calledSearchFilesInRepos.Store(true)
+				repo := types.RepoName{ID: 1, Name: "repo"}
+				fm := mkFileMatch(repo, "dir/file", 123)
+				return []result.Match{fm}, &streaming.Stats{}, nil
+			}
+			defer func() { unindexed.MockSearchFilesInRepos = nil }()
+
+			testCallResults(t, `foo\d "bar*"`, "V1", []string{"dir/file:123"})
+			if !calledReposListRepoNames {
+				t.Error("!calledReposListRepoNames")
+			}
+			if !calledSearchRepositories {
+				t.Error("!calledSearchRepositories")
+			}
+			if !calledSearchFilesInRepos.Load() {
+				t.Error("!calledSearchFilesInRepos")
+			}
+			if calledSearchSymbols {
+				t.Error("calledSearchSymbols")
+			}
+		})
+	*/
 
 	/*
 		t.Run("multiple terms literal", func(t *testing.T) {
