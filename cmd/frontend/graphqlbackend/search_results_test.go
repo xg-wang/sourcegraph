@@ -14,7 +14,6 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/search"
 	"github.com/sourcegraph/sourcegraph/internal/search/result"
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
-	"github.com/sourcegraph/sourcegraph/internal/search/symbol"
 	"github.com/sourcegraph/sourcegraph/internal/search/unindexed"
 	"github.com/sourcegraph/sourcegraph/internal/types"
 	"github.com/sourcegraph/sourcegraph/schema"
@@ -137,17 +136,6 @@ func TestSearchResults(t *testing.T) {
 		database.Mocks.Repos.MockGet(t, 1)
 		database.Mocks.Repos.Count = mockCount
 
-		calledSearchSymbols := false
-		symbol.MockSearchSymbols = func(ctx context.Context, args *search.TextParameters, limit int) (res []result.Match, common *streaming.Stats, err error) {
-			calledSearchSymbols = true
-			if want := `(foo\d).*?(bar\*)`; args.PatternInfo.Pattern != want {
-				t.Errorf("got %q, want %q", args.PatternInfo.Pattern, want)
-			}
-			// TODO return mock results here and assert that they are output as results
-			return nil, nil, nil
-		}
-		defer func() { symbol.MockSearchSymbols = nil }()
-
 		calledSearchFilesInRepos := atomic.NewBool(false)
 		unindexed.MockSearchFilesInRepos = func() ([]result.Match, *streaming.Stats, error) {
 			calledSearchFilesInRepos.Store(true)
@@ -163,9 +151,6 @@ func TestSearchResults(t *testing.T) {
 		}
 		if !calledSearchFilesInRepos.Load() {
 			t.Error("!calledSearchFilesInRepos")
-		}
-		if calledSearchSymbols {
-			t.Error("calledSearchSymbols")
 		}
 	})
 
