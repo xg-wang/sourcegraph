@@ -88,7 +88,7 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 	// no more local results remaining.
 	var locations []lsifstore.Location
 	if cursor.Phase == "local" {
-		localLocations, hasMore, err := r.pageLocalReferences(ctx, "references", adjustedUploads, &cursor, limit-len(locations))
+		localLocations, hasMore, err := r.pageLocalReferences(ctx, "references", adjustedUploads, &cursor.LocalCursor, limit-len(locations))
 		if err != nil {
 			return nil, "", err
 		}
@@ -231,9 +231,9 @@ func (r *queryResolver) definitionUploadIDsFromCursor(ctx context.Context, adjus
 // traversing the LSIF graph. The given cursor will be adjusted to reflect the offsets required to resolve
 // the next page of results. If there are no more pages left in the result set, a false-valued flag is
 // returned.
-func (r *queryResolver) pageLocalReferences(ctx context.Context, ty string, adjustedUploads []adjustedUpload, cursor *referencesCursor, limit int) ([]lsifstore.Location, bool, error) {
+func (r *queryResolver) pageLocalReferences(ctx context.Context, ty string, adjustedUploads []adjustedUpload, cursor *localCursor, limit int) ([]lsifstore.Location, bool, error) {
 	var allLocations []lsifstore.Location
-	for _, adjustedUpload := range adjustedUploads[cursor.LocalBatchOffset:] {
+	for _, adjustedUpload := range adjustedUploads[cursor.UploadOffset:] {
 		if len(allLocations) >= limit {
 			// We've filled the page
 			break
@@ -250,24 +250,24 @@ func (r *queryResolver) pageLocalReferences(ctx context.Context, ty string, adju
 			adjustedUpload.AdjustedPosition.Line,
 			adjustedUpload.AdjustedPosition.Character,
 			limit-len(allLocations),
-			cursor.LocalOffset,
+			cursor.LocationOffset,
 		)
 		if err != nil {
 			return nil, false, errors.Wrap(err, "lsifstore.References")
 		}
 
-		cursor.LocalOffset += len(locations)
+		cursor.LocationOffset += len(locations)
 
-		if cursor.LocalOffset >= totalCount {
+		if cursor.LocationOffset >= totalCount {
 			// Skip this index on next request
-			cursor.LocalOffset = 0
-			cursor.LocalBatchOffset++
+			cursor.LocationOffset = 0
+			cursor.UploadOffset++
 		}
 
 		allLocations = append(allLocations, locations...)
 	}
 
-	return allLocations, cursor.LocalBatchOffset < len(adjustedUploads), nil
+	return allLocations, cursor.UploadOffset < len(adjustedUploads), nil
 }
 
 // maximumIndexesPerMonikerSearch configures the maximum number of reference upload identifiers
