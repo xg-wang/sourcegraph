@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/inconshreveable/log15"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/database"
 	"github.com/sourcegraph/sourcegraph/internal/database/dbtesting"
@@ -36,14 +37,20 @@ func TestSearchResults(t *testing.T) {
 	limitOffset := &database.LimitOffset{Limit: search.SearchLimits(conf.Get()).MaxRepos + 1}
 
 	getResults := func(t *testing.T, query, version string) []string {
+		log15.Info("C.")
 		r, err := (&schemaResolver{db: db}).Search(context.Background(), &SearchArgs{Query: query, Version: version})
+		log15.Info("D.")
 		if err != nil {
+			log15.Info("E.")
 			t.Fatal("Search:", err)
 		}
+		log15.Info("F.")
 		results, err := r.Results(context.Background())
+		log15.Info("G.")
 		if err != nil {
 			t.Fatal("Results:", err)
 		}
+		log15.Info("H.")
 		resultDescriptions := make([]string, len(results.Matches))
 		for i, match := range results.Matches {
 			// NOTE: Only supports one match per line. If we need to test other cases,
@@ -57,8 +64,10 @@ func TestSearchResults(t *testing.T) {
 				t.Fatal("unexpected result type", match)
 			}
 		}
+		log15.Info("I.")
 		// dedup results since we expect our clients to do dedupping
 		if len(resultDescriptions) > 1 {
+			log15.Info("J.")
 			sort.Strings(resultDescriptions)
 			dedup := resultDescriptions[:1]
 			for _, s := range resultDescriptions[1:] {
@@ -71,8 +80,11 @@ func TestSearchResults(t *testing.T) {
 		return resultDescriptions
 	}
 	testCallResults := func(t *testing.T, query, version string, want []string) {
+		log15.Info("A.")
 		t.Helper()
+		log15.Info("B.")
 		results := getResults(t, query, version)
+		log15.Info("Z.")
 		if d := cmp.Diff(want, results); d != "" {
 			t.Errorf("unexpected results (-want, +got):\n%s", d)
 		}
