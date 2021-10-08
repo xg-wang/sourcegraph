@@ -13,7 +13,6 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/database/dbtesting"
 	"github.com/sourcegraph/sourcegraph/internal/search"
 	"github.com/sourcegraph/sourcegraph/internal/search/result"
-	"github.com/sourcegraph/sourcegraph/internal/search/run"
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
 	"github.com/sourcegraph/sourcegraph/internal/search/symbol"
 	"github.com/sourcegraph/sourcegraph/internal/search/unindexed"
@@ -138,13 +137,6 @@ func TestSearchResults(t *testing.T) {
 		database.Mocks.Repos.MockGet(t, 1)
 		database.Mocks.Repos.Count = mockCount
 
-		calledSearchRepositories := false
-		run.MockSearchRepositories = func(args *search.TextParameters) ([]result.Match, *streaming.Stats, error) {
-			calledSearchRepositories = true
-			return nil, &streaming.Stats{}, nil
-		}
-		defer func() { run.MockSearchRepositories = nil }()
-
 		calledSearchSymbols := false
 		symbol.MockSearchSymbols = func(ctx context.Context, args *search.TextParameters, limit int) (res []result.Match, common *streaming.Stats, err error) {
 			calledSearchSymbols = true
@@ -168,9 +160,6 @@ func TestSearchResults(t *testing.T) {
 		testCallResults(t, `foo\d "bar*"`, "V1", []string{"dir/file:123"})
 		if !calledReposListRepoNames {
 			t.Error("!calledReposListRepoNames")
-		}
-		if !calledSearchRepositories {
-			t.Error("!calledSearchRepositories")
 		}
 		if !calledSearchFilesInRepos.Load() {
 			t.Error("!calledSearchFilesInRepos")
