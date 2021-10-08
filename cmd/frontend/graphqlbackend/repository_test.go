@@ -128,28 +128,6 @@ func TestRepositoryHydration(t *testing.T) {
 	})
 }
 
-func assertRepoResolverHydrated(ctx context.Context, t *testing.T, r *RepositoryResolver, hydrated *types.Repo) {
-	t.Helper()
-
-	description, err := r.Description(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if description != hydrated.Description {
-		t.Fatalf("wrong Description. want=%q, have=%q", hydrated.Description, description)
-	}
-
-	uri, err := r.URI(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if uri != hydrated.URI {
-		t.Fatalf("wrong URI. want=%q, have=%q", hydrated.URI, uri)
-	}
-}
-
 func TestRepositoryLabel(t *testing.T) {
 	test := func(name string) string {
 		r := &RepositoryResolver{
