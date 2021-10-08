@@ -70,19 +70,6 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 		log.String("monikers", monikersToString(cursor.OrderedMonikers)),
 	)
 
-	// Determine the set of uploads that define one of the ordered monikers. This may include
-	// one of the adjusted indexes. This data may already be stashed in the cursor decoded above,
-	// in which case we don't need to hit the database.
-
-	definitionUploadIDs, err := r.definitionUploadIDsFromCursor(ctx, adjustedUploads, cursor.OrderedMonikers, &cursor)
-	if err != nil {
-		return nil, "", err
-	}
-	traceLog(
-		log.Int("numDefinitionUploads", len(definitionUploadIDs)),
-		log.String("definitionUploads", intsToString(definitionUploadIDs)),
-	)
-
 	// Phase 1: Gather all "local" locations via LSIF graph traversal. We'll continue to request additional
 	// locations until we fill an entire page (the size of which is denoted by the given limit) or there are
 	// no more local results remaining.
@@ -105,7 +92,7 @@ func (r *queryResolver) References(ctx context.Context, line, character, limit i
 	// more local results remaining, just as we did above.
 	if cursor.Phase == "remote" {
 		for len(locations) < limit {
-			remoteLocations, hasMore, err := r.pageRemoteReferences(ctx, "references", adjustedUploads, cursor.OrderedMonikers, definitionUploadIDs, &cursor.RemoteCursor, limit-len(locations))
+			remoteLocations, hasMore, err := r.pageRemoteReferences(ctx, "references", adjustedUploads, cursor.OrderedMonikers, &cursor.RemoteCursor, limit-len(locations))
 			if err != nil {
 				return nil, "", err
 			}
@@ -188,45 +175,6 @@ func (r *queryResolver) adjustedUploadsFromCursor(ctx context.Context, line, cha
 	return adjustedUploads, nil
 }
 
-// definitionUploadIDsFromCursor returns a set of identifiers for uploads that provide any of the given
-// monikers. Uploads already present in the given adjusted uploads slice will be omitted from the returned
-// slice. The returned slice will be cached on the given cursor. If this data is already stashed in the
-// given cursor, we don't need to hit the database.
-//
-// The upload records returned from the database, if any, are also returned from this method to help reduce
-// the number of database queries necessary.
-func (r *queryResolver) definitionUploadIDsFromCursor(ctx context.Context, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, cursor *referencesCursor) ([]int, error) {
-	if cursor.DefinitionUploadIDs != nil {
-		return cursor.DefinitionUploadIDs, nil
-	}
-
-	definitionUploads, err := r.definitionUploads(ctx, orderedMonikers)
-	if err != nil {
-		return nil, err
-	}
-
-	// Omit the given adjusted uploads
-	definitionUploadIDs := make([]int, 0, len(definitionUploads))
-	for i := range definitionUploads {
-		found := false
-		for j := range adjustedUploads {
-			if definitionUploads[i].ID == adjustedUploads[j].Upload.ID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			definitionUploadIDs = append(definitionUploadIDs, definitionUploads[i].ID)
-		}
-	}
-
-	// Stash the definition upload IDs and set a flag indicating their presence. We set a flag explicitly
-	// to avoid ambiguity between no data in the cursor and an empty list in the cursor.
-
-	cursor.DefinitionUploadIDs = definitionUploadIDs
-	return definitionUploadIDs, nil
-}
-
 // pageLocalReferences returns a slice of the (local) result set denoted by the given cursor fulfilled by
 // traversing the LSIF graph. The given cursor will be adjusted to reflect the offsets required to resolve
 // the next page of results. If there are no more pages left in the result set, a false-valued flag is
@@ -278,7 +226,7 @@ const maximumIndexesPerMonikerSearch = 50
 // performing a moniker search over a group of indexes. The given cursor will be adjusted to reflect the
 // offsets required to resolve the next page of results. If there are no more pages left in the result set,
 // a false-valued flag is returned.
-func (r *queryResolver) pageRemoteReferences(ctx context.Context, lsifDataTable string, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, definitionUploadIDs []int, cursor *remoteCursor, limit int) ([]lsifstore.Location, bool, error) {
+func (r *queryResolver) pageRemoteReferences(ctx context.Context, lsifDataTable string, adjustedUploads []adjustedUpload, orderedMonikers []precise.QualifiedMonikerData, cursor *remoteCursor, limit int) ([]lsifstore.Location, bool, error) {
 	for len(cursor.UploadBatchIDs) == 0 {
 		if cursor.UploadOffset < 0 {
 			// No more batches
@@ -286,7 +234,7 @@ func (r *queryResolver) pageRemoteReferences(ctx context.Context, lsifDataTable 
 		}
 
 		// Find the next batch of indexes to perform a moniker search over
-		referenceUploadIDs, recordsScanned, totalRecords, err := r.uploadIDsWithReferences(ctx, orderedMonikers, definitionUploadIDs, maximumIndexesPerMonikerSearch, cursor.UploadOffset)
+		referenceUploadIDs, recordsScanned, totalRecords, err := r.uploadIDsWithReferences(ctx, orderedMonikers, maximumIndexesPerMonikerSearch, cursor.UploadOffset)
 		if err != nil {
 			return nil, false, err
 		}
@@ -378,7 +326,7 @@ func rangeContainsPosition(r lsifstore.Range, pos lsifstore.Position) bool {
 // are listed in the given ignored identifier slice. This method also returns the number of records
 // scanned (but possibly filtered out from the return slice) from the database (the offset for the
 // subsequent request) and the total number of records in the database.
-func (r *queryResolver) uploadIDsWithReferences(ctx context.Context, orderedMonikers []precise.QualifiedMonikerData, ignoreIDs []int, limit, offset int) (ids []int, recordsScanned int, totalCount int, err error) {
+func (r *queryResolver) uploadIDsWithReferences(ctx context.Context, orderedMonikers []precise.QualifiedMonikerData, limit, offset int) (ids []int, recordsScanned int, totalCount int, err error) {
 	scanner, totalCount, err := r.dbStore.ReferenceIDsAndFilters(ctx, r.repositoryID, r.commit, orderedMonikers, limit, offset)
 	if err != nil {
 		return nil, 0, 0, errors.Wrap(err, "dbstore.ReferenceIDsAndFilters")
@@ -389,11 +337,6 @@ func (r *queryResolver) uploadIDsWithReferences(ctx context.Context, orderedMoni
 			err = multierror.Append(err, errors.Wrap(closeErr, "dbstore.ReferenceIDsAndFilters.Close"))
 		}
 	}()
-
-	ignoreIDsMap := map[int]struct{}{}
-	for id := range ignoreIDs {
-		ignoreIDsMap[id] = struct{}{}
-	}
 
 	filtered := map[int]struct{}{}
 
@@ -410,11 +353,6 @@ func (r *queryResolver) uploadIDsWithReferences(ctx context.Context, orderedMoni
 		if _, ok := filtered[packageReference.DumpID]; ok {
 			// This index includes a definition so we can skip testing the filters here. The index
 			// will be included in the moniker search regardless if it contains additional references.
-			continue
-		}
-
-		if _, ok := ignoreIDsMap[packageReference.DumpID]; ok {
-			// Already in set, don't duplicate tests
 			continue
 		}
 
