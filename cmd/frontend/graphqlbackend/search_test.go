@@ -3,7 +3,6 @@ package graphqlbackend
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http/httptest"
 	"reflect"
 	"strings"
@@ -24,7 +23,6 @@ import (
 	searchbackend "github.com/sourcegraph/sourcegraph/internal/search/backend"
 	"github.com/sourcegraph/sourcegraph/internal/search/query"
 	searchrepos "github.com/sourcegraph/sourcegraph/internal/search/repos"
-	"github.com/sourcegraph/sourcegraph/internal/search/result"
 	"github.com/sourcegraph/sourcegraph/internal/search/run"
 	"github.com/sourcegraph/sourcegraph/internal/types"
 	"github.com/sourcegraph/sourcegraph/internal/vcs/git"
@@ -521,20 +519,6 @@ func TestVersionContext(t *testing.T) {
 	}
 }
 
-func mkFileMatch(repo types.RepoName, path string, lineNumbers ...int32) *result.FileMatch {
-	var lines []*result.LineMatch
-	for _, n := range lineNumbers {
-		lines = append(lines, &result.LineMatch{LineNumber: n})
-	}
-	return &result.FileMatch{
-		File: result.File{
-			Path: path,
-			Repo: repo,
-		},
-		LineMatches: lines,
-	}
-}
-
 func BenchmarkSearchResults(b *testing.B) {
 	db := new(dbtesting.MockDB)
 
@@ -583,54 +567,6 @@ func BenchmarkSearchResults(b *testing.B) {
 			b.Fatalf("wrong results length. want=%d, have=%d\n", len(zoektFileMatches), results.MatchCount())
 		}
 	}
-}
-
-func generateRepos(count int) ([]types.RepoName, []*zoekt.RepoListEntry) {
-	repos := make([]types.RepoName, 0, count)
-	zoektRepos := make([]*zoekt.RepoListEntry, 0, count)
-
-	for i := 1; i <= count; i++ {
-		name := fmt.Sprintf("repo-%d", i)
-
-		repoWithIDs := types.RepoName{
-			ID:   api.RepoID(i),
-			Name: api.RepoName(name),
-		}
-
-		repos = append(repos, repoWithIDs)
-
-		zoektRepos = append(zoektRepos, &zoekt.RepoListEntry{
-			Repository: zoekt.Repository{
-				ID:       uint32(i),
-				Name:     name,
-				Branches: []zoekt.RepositoryBranch{{Name: "HEAD", Version: "deadbeef"}},
-			},
-		})
-	}
-	return repos, zoektRepos
-}
-
-func generateZoektMatches(count int) []zoekt.FileMatch {
-	var zoektFileMatches []zoekt.FileMatch
-	for i := 1; i <= count; i++ {
-		repoName := fmt.Sprintf("repo-%d", i)
-		fileName := fmt.Sprintf("foobar-%d.go", i)
-
-		zoektFileMatches = append(zoektFileMatches, zoekt.FileMatch{
-			Score:        5.0,
-			FileName:     fileName,
-			RepositoryID: uint32(i),
-			Repository:   repoName, // Important: this needs to match a name in `repos`
-			Branches:     []string{"master"},
-			LineMatches: []zoekt.LineMatch{
-				{
-					Line: nil,
-				},
-			},
-			Checksum: []byte{0, 1, 2},
-		})
-	}
-	return zoektFileMatches
 }
 
 // zoektRPC starts zoekts rpc interface and returns a client to
