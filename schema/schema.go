@@ -172,17 +172,17 @@ type BatchSpec struct {
 	// Description description: The description of the batch change.
 	Description string `json:"description,omitempty"`
 	// ImportChangesets description: Import existing changesets on code hosts.
-	ImportChangesets []*ImportChangesets `json:"importChangesets,omitempty"`
+	ImportChangesets interface{} `json:"importChangesets,omitempty"`
 	// Name description: The name of the batch change, which is unique among all batch changes in the namespace. A batch change's name is case-preserving.
 	Name string `json:"name"`
 	// On description: The set of repositories (and branches) to run the batch change on, specified as a list of search queries (that match repositories) and/or specific repositories.
-	On []interface{} `json:"on,omitempty"`
+	On interface{} `json:"on,omitempty"`
 	// Steps description: The sequence of commands to run (for each repository branch matched in the `on` property) to produce the workspace changes that will be included in the batch change.
-	Steps []*Step `json:"steps,omitempty"`
+	Steps interface{} `json:"steps,omitempty"`
 	// TransformChanges description: Optional transformations to apply to the changes produced in each repository.
-	TransformChanges *TransformChanges `json:"transformChanges,omitempty"`
+	TransformChanges interface{} `json:"transformChanges,omitempty"`
 	// Workspaces description: Individual workspace configurations for one or more repositories that define which workspaces to use for the execution of steps in the repositories.
-	Workspaces []*WorkspaceConfiguration `json:"workspaces,omitempty"`
+	Workspaces interface{} `json:"workspaces,omitempty"`
 }
 
 // BitbucketCloudConnection description: Configuration for a connection to Bitbucket Cloud.
@@ -866,7 +866,7 @@ func (v *IdentityProvider) UnmarshalJSON(data []byte) error {
 
 type ImportChangesets struct {
 	// ExternalIDs description: The changesets to import from the code host. For GitHub this is the PR number, for GitLab this is the MR number, for Bitbucket Server this is the PR number.
-	ExternalIDs []interface{} `json:"externalIDs"`
+	ExternalIDs interface{} `json:"externalIDs"`
 	// Repository description: The repository name as configured on your Sourcegraph instance.
 	Repository string `json:"repository"`
 }
@@ -1611,11 +1611,11 @@ type Step struct {
 	// Env description: Environment variables to set in the step environment.
 	Env interface{} `json:"env,omitempty"`
 	// Files description: Files that should be mounted into or be created inside the Docker container.
-	Files map[string]string `json:"files,omitempty"`
+	Files interface{} `json:"files,omitempty"`
 	// If description: A condition to check before executing steps. Supports templating. The value 'true' is interpreted as true.
 	If interface{} `json:"if,omitempty"`
 	// Outputs description: Output variables of this step that can be referenced in the changesetTemplate or other steps via outputs.<name-of-output>
-	Outputs map[string]AdditionalProperties `json:"outputs,omitempty"`
+	Outputs interface{} `json:"outputs,omitempty"`
 	// Run description: The shell command to run in the container. It can also be a multi-line shell script. The working directory is the root directory of the repository checkout.
 	Run string `json:"run"`
 }
@@ -1627,12 +1627,6 @@ type TlsExternal struct {
 	// InsecureSkipVerify description: insecureSkipVerify controls whether a client verifies the server's certificate chain and host name.
 	// If InsecureSkipVerify is true, TLS accepts any certificate presented by the server and any host name in that certificate. In this mode, TLS is susceptible to man-in-the-middle attacks.
 	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
-}
-
-// TransformChanges description: Optional transformations to apply to the changes produced in each repository.
-type TransformChanges struct {
-	// Group description: A list of groups of changes in a repository that each create a separate, additional changeset for this repository, with all ungrouped changes being in the default changeset.
-	Group []interface{} `json:"group,omitempty"`
 }
 type UpdateIntervalRule struct {
 	// Interval description: An integer representing the number of minutes to wait until the next update
