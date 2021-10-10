@@ -215,7 +215,7 @@ func buildDiffCommand(bkClient *buildkite.Client, branch, commit string) ([]stri
 		}
 	}
 	if !found {
-		fmt.Fprintln(os.Stderr, "Commit of previous not found in current branch. Comparing with main")
+		fmt.Fprintln(os.Stderr, "Commit of previous build not found in current branch. Comparing with main")
 		return append(diffCommand, "origin/main..."+commit), commit, nil
 	}
 
