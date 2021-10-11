@@ -7,6 +7,14 @@ export const MONACO_LANGUAGES_AND_FEATURES: Required<
     Pick<NonNullable<ConstructorParameters<typeof MonacoWebpackPlugin>[0]>, 'languages' | 'features'>
 > = {
     languages: ['json', 'yaml'],
+    globalAPI: true,
+    customLanguages: [
+        {
+            label: 'yaml',
+            entry: 'monaco-yaml/lib/esm/monaco.contribution',
+            worker: { id: 'vs/language/yaml/yamlWorker', entry: 'monaco-yaml/lib/esm/yaml.worker' },
+        },
+    ],
     features: [
         'bracketMatching',
         'clipboard',

@@ -15,7 +15,8 @@ const BatchSpecJSON = `{
     "name": {
       "type": "string",
       "description": "The name of the batch change, which is unique among all batch changes in the namespace. A batch change's name is case-preserving.",
-      "pattern": "^[\\w.-]+$"
+      "pattern": "^[\\w.-]+$",
+      "examples": ["refactor-the-universe"]
     },
     "description": {
       "type": "string",
@@ -113,6 +114,7 @@ const BatchSpecJSON = `{
             "type": ["object", "null"],
             "description": "Output variables of this step that can be referenced in the changesetTemplate or other steps via outputs.<name-of-output>",
             "additionalProperties": {
+              "title": "OutputVariable",
               "type": "object",
               "required": ["value"],
               "properties": {
@@ -136,14 +138,14 @@ const BatchSpecJSON = `{
                 "type": "null"
               },
               {
-                "type": ["object"],
+                "type": "object",
                 "description": "Environment variables to set in the step environment.",
                 "additionalProperties": {
                   "type": "string"
                 }
               },
               {
-                "type": ["array"],
+                "type": "array",
                 "items": {
                   "oneOf": [
                     {
@@ -192,23 +194,27 @@ const BatchSpecJSON = `{
         "group": {
           "type": ["array", "null"],
           "description": "A list of groups of changes in a repository that each create a separate, additional changeset for this repository, with all ungrouped changes being in the default changeset.",
-          "additionalProperties": false,
-          "required": ["directory", "branchSuffix"],
-          "properties": {
-            "directory": {
-              "type": "string",
-              "description": "The directory path (relative to the repository root) of the changes to include in this group.",
-              "minLength": 1
-            },
-            "branch": {
-              "type": "string",
-              "description": "The branch on the repository to propose changes to. If unset, the repository's default branch is used.",
-              "minLength": 1
-            },
-            "repository": {
-              "type": "string",
-              "description": "Only apply this transformation in the repository with this name (as it is known to Sourcegraph).",
-              "examples": ["github.com/foo/bar"]
+          "items": {
+            "title": "TransformChangesGroup",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["directory", "branch"],
+            "properties": {
+              "directory": {
+                "type": "string",
+                "description": "The directory path (relative to the repository root) of the changes to include in this group.",
+                "minLength": 1
+              },
+              "branch": {
+                "type": "string",
+                "description": "The branch on the repository to propose changes to. If unset, the repository's default branch is used.",
+                "minLength": 1
+              },
+              "repository": {
+                "type": "string",
+                "description": "Only apply this transformation in the repository with this name (as it is known to Sourcegraph).",
+                "examples": ["github.com/foo/bar"]
+              }
             }
           }
         }

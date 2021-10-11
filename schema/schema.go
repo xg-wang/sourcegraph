@@ -1662,7 +1662,7 @@ type TransformChanges struct {
 }
 type TransformChangesGroup struct {
 	// Branch description: The branch on the repository to propose changes to. If unset, the repository's default branch is used.
-	Branch string `json:"branch,omitempty"`
+	Branch string `json:"branch"`
 	// Directory description: The directory path (relative to the repository root) of the changes to include in this group.
 	Directory string `json:"directory"`
 	// Repository description: Only apply this transformation in the repository with this name (as it is known to Sourcegraph).

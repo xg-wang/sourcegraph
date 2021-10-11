@@ -293,20 +293,3 @@ export class MonacoEditor extends React.PureComponent<Props, State> {
 
     private getTheme = (isLightTheme: boolean): string => (isLightTheme ? SOURCEGRAPH_LIGHT : SOURCEGRAPH_DARK)
 }
-
-if (!window.MonacoEnvironment) {
-    window.MonacoEnvironment = {
-        getWorkerUrl(moduleId: string, label: string): string {
-            if (label === 'json') {
-                return window.context.assetsRoot + '/scripts/json.worker.bundle.js'
-            }
-            if (label === 'yaml') {
-                return window.context.assetsRoot + '/scripts/yaml.worker.bundle.js'
-            }
-            if (label === 'editorWorkerService') {
-                return window.context.assetsRoot + '/scripts/editor.worker.bundle.js'
-            }
-            throw new Error('Invalid worker type requested for monaco')
-        },
-    }
-}
