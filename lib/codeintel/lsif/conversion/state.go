@@ -24,7 +24,7 @@ type State struct {
 	LinkedMonikers         *datastructures.DisjointIDSet   // tracks which moniker ids are related via next edges
 	LinkedReferenceResults map[int][]int                   // tracks which reference result ids are related via item edges
 	Monikers               *datastructures.DefaultIDSetMap // maps items to their monikers
-	Contains               *datastructures.DefaultIDSetMap // maps ranges to containing documents
+	Contains               *datastructures.DefaultIDSetMap // maps documents to contained ranges
 	Diagnostics            *datastructures.DefaultIDSetMap // maps diagnostics to their documents
 
 	// Sourcegraph extensions
