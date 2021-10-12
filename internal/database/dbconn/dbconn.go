@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	// Global is the global DB connection.
+	// Global is the global DB connection!
 	// Only use this after a call to SetupGlobalConnection.
 	Global *sql.DB
 
