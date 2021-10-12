@@ -78,7 +78,7 @@ OR  (
 		)
 	)
 )
-OR EXISTS ( -- We assume that all repos added by the authenticated user should be shown
+OR EXISTS (                      -- We assume that all repos added by the authenticated user should be shown
 	SELECT
 	FROM external_service_repos
 	WHERE repo_id = repo.id
@@ -92,7 +92,7 @@ OR (                             -- Restricted repositories require checking per
 			user_id = %s
 		AND permission = %s
 		AND object_type = 'repos'
-	) AND EXISTS (                      -- Check if the repository is also added by an organization the user is a member of
+	) AND EXISTS (               -- Check if the repository is also added by an organization the user is a member of
 		SELECT
 		FROM external_service_repos
 		WHERE repo_id = repo.id
