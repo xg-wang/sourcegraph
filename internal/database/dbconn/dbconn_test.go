@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestBuildConfigs(t *testing.T) {
+func TestBuildConfig(t *testing.T) {
 	tests := []struct {
 		name                    string
 		dataSource              string
@@ -15,7 +15,7 @@ func TestBuildConfigs(t *testing.T) {
 			name:                    "empty dataSource",
 			dataSource:              "",
 			expectedApplicationName: defaultApplicationName,
-			fails:                   true,
+			fails:                   false,
 		}, {
 			name:                    "connection string",
 			dataSource:              "dbname=sourcegraph host=localhost sslmode=verify-full user=sourcegraph",
