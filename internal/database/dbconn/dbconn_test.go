@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestBuildConfig(t *testing.T) {
+func TestBuildConfigs(t *testing.T) {
 	tests := []struct {
 		name                    string
 		dataSource              string
