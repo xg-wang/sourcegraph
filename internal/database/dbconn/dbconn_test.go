@@ -15,7 +15,7 @@ func TestBuildConfigs(t *testing.T) {
 			name:                    "empty dataSource",
 			dataSource:              "",
 			expectedApplicationName: defaultApplicationName,
-			fails:                   false,
+			fails:                   true,
 		}, {
 			name:                    "connection string",
 			dataSource:              "dbname=sourcegraph host=localhost sslmode=verify-full user=sourcegraph",
