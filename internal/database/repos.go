@@ -1342,7 +1342,7 @@ inserted_repos AS (
 	name,
 	NULLIF(BTRIM(uri), ''),
 	description,
-	created_at,
+	created_at
 	updated_at,
 	deleted_at,
 	external_service_type,
