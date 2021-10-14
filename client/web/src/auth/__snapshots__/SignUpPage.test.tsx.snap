@@ -35,7 +35,7 @@ exports[`SignUpPage renders sign up page (cloud) 1`] = `
       <h2
         className="pageHeading"
       >
-        Easily search the code you care about.
+        Easily search the code you care about
       </h2>
     </div>
   </header>
@@ -90,8 +90,7 @@ exports[`SignUpPage renders sign up page (cloud) 1`] = `
       <div
         className="mb-4"
       >
-        Or,
-         
+        Or, 
         <a
           href="/?showEmail=true"
           onClick={[Function]}
