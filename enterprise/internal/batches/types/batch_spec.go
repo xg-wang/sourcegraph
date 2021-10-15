@@ -38,6 +38,9 @@ type BatchSpec struct {
 	// executed server-side.
 	CreatedFromRaw bool
 
+	AllowUnsupported bool
+	AllowIgnored     bool
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
